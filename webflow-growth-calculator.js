@@ -42,7 +42,7 @@
   };
   const Y_HEADROOM_FACTOR = 1.08;
   const MAX_FINITE_FLOW = Number.MAX_VALUE;
-  const PROJECTION_SOFT_CAP_WEEKLY = 1e15;
+  const PROJECTION_SOFT_CAP_WEEKLY = 1e30;
   const MIN_WEEKLY_LOG_FLOOR = 1e-9;
   const MIN_DISPLAY_Y_FLOOR_BY_UNIT = {
     week: 1,
@@ -63,6 +63,19 @@
   const MIN_TOTAL_LINE_SEGMENTS = 120;
   const MAX_TOTAL_LINE_SEGMENTS = 320;
   const TOTAL_LINE_PIXELS_PER_SEGMENT = 5;
+  const HANDLE_RECT_VISUAL_WIDTH = 22;
+  const HANDLE_RECT_VISUAL_HEIGHT = 16;
+  const HANDLE_RECT_HIT_PADDING = 8;
+  const RIGHT_LABEL_INSIDE_PADDING_FROM_HANDLE = 15;
+  const EXPENSE_SERIES_DASHARRAY = '1 6';
+  const EXPENSE_SERIES_OPACITY = 0.5;
+  const INLINE_LINE_LABEL_T_RATIO = 0.28;
+  const INLINE_LINE_LABEL_MIN_GAP = 12;
+  const DRAG_RENDER_OPTIONS = Object.freeze({
+    skipInputs: true,
+    skipKpis: true,
+    skipYDomain: true
+  });
 
   // Baseline Y-axis ticks in display units.
   const Y_TICKS_BY_UNIT = {
@@ -193,10 +206,21 @@
     }
 
     let abs = Math.abs(value);
+    if (abs >= 1e21) {
+      let scientific = abs
+        .toExponential(2)
+        .replace('+', '')
+        .replace(/(\.\d*[1-9])0+e/, '$1e')
+        .replace(/\.0+e/, 'e');
+      return (value < 0 ? '-$' : '$') + scientific;
+    }
+
     let suffix = '';
     let scaled = abs;
 
     let scales = [
+      {threshold: 999e15, suffix: 'Qi', divisor: 1e18},
+      {threshold: 999e12, suffix: 'Q', divisor: 1e15},
       {threshold: 999e9, suffix: 'T', divisor: 1e12},
       {threshold: 999e6, suffix: 'B', divisor: 1e9},
       {threshold: 999e3, suffix: 'M', divisor: 1e6},
@@ -643,11 +667,17 @@
         if (!self.drag) {
           return;
         }
-        let hasStateUpdate = self._handleDrag(event);
+        let coords = self._eventToChart(event);
+        if (!coords) {
+          return;
+        }
+
+        let hasStateUpdate = self._handleDragAt(coords);
         if (!hasStateUpdate) {
           return;
         }
-        self.render();
+        self._stabilizeDrag(coords);
+        self.render(DRAG_RENDER_OPTIONS);
       });
 
       /**
@@ -669,14 +699,11 @@
       this.nodes.svg.addEventListener('pointercancel', endDrag);
     };
 
-    /**
-     * Updates state while dragging a specific handle.
-     */
-    _handleDrag(event) {
-      let coords = this._eventToChart(event);
+    _handleDragAt(coords) {
       if (!coords) {
         return false;
       }
+
       let t = this._xToTime(coords.x);
       let value = this._yToValue(coords.y);
       let hasFiniteDragValues = isFiniteNumber(coords.x) && isFiniteNumber(coords.y) && isFiniteNumber(t) && isFiniteNumber(value);
@@ -713,6 +740,30 @@
         }
         default:
           return false;
+      }
+    };
+
+    _stabilizeDrag(coords) {
+      let maxReprojectPasses = 3;
+
+      for (let pass = 0; pass < maxReprojectPasses; pass += 1) {
+        let hasDragDomain = Boolean(this.drag && this.drag.domain);
+        if (!hasDragDomain) {
+          break;
+        }
+
+        let prevYMaxLock = this.drag.domain.yMaxLock;
+        this._updateYDomain();
+        let nextYMaxLock = this.drag && this.drag.domain ? this.drag.domain.yMaxLock : NaN;
+        let yMaxExpanded = isFiniteNumber(prevYMaxLock) && isFiniteNumber(nextYMaxLock) && nextYMaxLock > prevYMaxLock;
+        if (!yMaxExpanded) {
+          break;
+        }
+
+        let hasReprojectedState = this._handleDragAt(coords);
+        if (!hasReprojectedState) {
+          break;
+        }
       }
     };
 
@@ -770,6 +821,42 @@
         return value > 0 ? MAX_FINITE_FLOW : 0;
       }
       return clamp(value, 0, MAX_FINITE_FLOW);
+    };
+
+    _applyHeadroom(value, factor) {
+      let safeFactor = isFiniteNumber(factor) && factor > 1 ? factor : 1;
+      let safeValue = this._clampForProjection(value);
+      if (!isFiniteNumber(safeValue) || safeValue <= 0) {
+        return NaN;
+      }
+
+      let projectionMax = this._projectionMaxWeekly();
+      let maxBeforeScale = projectionMax / safeFactor;
+      let scaled = safeValue >= maxBeforeScale ? projectionMax : safeValue * safeFactor;
+      return this._clampForProjection(scaled);
+    };
+
+    _snapUpToOneThreeTick(value) {
+      let safeValue = this._clampForProjection(value);
+      if (!isFiniteNumber(safeValue) || safeValue <= 0) {
+        return MIN_WEEKLY_LOG_FLOOR;
+      }
+
+      let exponent = Math.floor(Math.log10(safeValue));
+      let scale = Math.pow(10, exponent);
+      let candidates = [1, 3, 10];
+      let snapped = 10 * scale;
+
+      for (let i = 0; i < candidates.length; i += 1) {
+        let candidate = candidates[i] * scale;
+        if (safeValue > candidate) {
+          continue;
+        }
+        snapped = candidate;
+        break;
+      }
+
+      return this._clampForProjection(snapped);
     };
 
     /**
@@ -868,7 +955,7 @@
         let hasMinVisibleDisplay = isFiniteNumber(minVisibleDisplay) && minVisibleDisplay > 0;
         yMinDisplayCandidate = hasMinVisibleDisplay ? minVisibleDisplay / 10 : yMinDisplayCandidate;
 
-        let yMaxCandidateWeekly = this._clampForProjection(maxVisible * Y_HEADROOM_FACTOR);
+        let yMaxCandidateWeekly = this._applyHeadroom(maxVisible, Y_HEADROOM_FACTOR);
         let yMaxCandidateDisplay = flowFromWeekly(yMaxCandidateWeekly, displayUnit);
         let hasMaxDisplay = isFiniteNumber(yMaxCandidateDisplay) && yMaxCandidateDisplay > 0;
         yMaxDisplayCandidate = hasMaxDisplay ? yMaxCandidateDisplay : yMaxDisplayCandidate;
@@ -956,6 +1043,44 @@
         let midDisplay = Math.sqrt(safeMinDisplay * safeMaxDisplay);
         this.chart.ticksY = [flowToWeekly(clamp(midDisplay, safeMinDisplay, safeMaxDisplay), displayUnit)];
       }
+    };
+
+    _hasValidDragDomain(dragDomain) {
+      return Boolean(
+        dragDomain &&
+        isFiniteNumber(dragDomain.yMinLock) &&
+        isFiniteNumber(dragDomain.yMaxLock) &&
+        dragDomain.yMaxLock > dragDomain.yMinLock
+      );
+    };
+
+    _updateYDomainDuringDrag(dragDomain, displayUnit, baselineDisplayTicks) {
+      let visibleValues = this._visibleValuesForYDomain();
+      let neededYMax = visibleValues.length ? this._applyHeadroom(Math.max.apply(null, visibleValues), Y_HEADROOM_FACTOR) : NaN;
+      let currentYMinLock = this._clampForProjection(dragDomain.yMinLock);
+      let currentYMaxLock = this._clampForProjection(dragDomain.yMaxLock);
+      let expandedYMax = isFiniteNumber(neededYMax) && neededYMax > currentYMaxLock ? this._snapUpToOneThreeTick(neededYMax) : currentYMaxLock;
+      let nextYMaxLock = expandedYMax > currentYMinLock ? expandedYMax : this._clampForProjection(currentYMinLock * 1.2);
+      let yMaxExpanded = nextYMaxLock > currentYMaxLock;
+      let hasLockedTicks = Array.isArray(dragDomain.ticksYLock) && dragDomain.ticksYLock.length > 0;
+
+      dragDomain.yMinLock = currentYMinLock;
+      dragDomain.yMaxLock = nextYMaxLock;
+      this.chart.yMin = currentYMinLock;
+      this.chart.yMax = nextYMaxLock;
+
+      if (hasLockedTicks && !yMaxExpanded) {
+        this.chart.ticksY = dragDomain.ticksYLock.slice();
+        return;
+      }
+
+      this._setTicksFromDisplayDomain(
+        displayUnit,
+        baselineDisplayTicks,
+        flowFromWeekly(this.chart.yMin, displayUnit),
+        flowFromWeekly(this.chart.yMax, displayUnit)
+      );
+      dragDomain.ticksYLock = this.chart.ticksY.slice();
     };
 
     /**
@@ -1072,32 +1197,12 @@
      */
     _updateYDomain() {
       let dragDomain = this.drag && this.drag.domain ? this.drag.domain : null;
-      let hasValidDragTicks = Boolean(dragDomain && Array.isArray(dragDomain.ticksYLock) && dragDomain.ticksYLock.length);
-      let hasValidDragRange = Boolean(
-        dragDomain &&
-        isFiniteNumber(dragDomain.yMinLock) &&
-        isFiniteNumber(dragDomain.yMaxLock) &&
-        dragDomain.yMaxLock > dragDomain.yMinLock
-      );
-      if (hasValidDragRange && hasValidDragTicks) {
-        this.chart.yMin = dragDomain.yMinLock;
-        this.chart.yMax = dragDomain.yMaxLock;
-        this.chart.ticksY = dragDomain.ticksYLock.slice();
-        return;
-      }
-
       let displayUnit = this.state.units;
       let displayFloor = MIN_DISPLAY_Y_FLOOR_BY_UNIT[displayUnit] || 1;
       let baselineDisplayTicks = Y_TICKS_BY_UNIT[displayUnit] || Y_TICKS_BY_UNIT.year || [];
 
-      if (hasValidDragRange) {
-        this.chart.yMin = dragDomain.yMinLock;
-        this.chart.yMax = dragDomain.yMaxLock;
-        let lockedDomain = {
-          yMinDisplay: flowFromWeekly(this.chart.yMin, displayUnit),
-          yMaxDisplay: flowFromWeekly(this.chart.yMax, displayUnit)
-        };
-        this._setTicksFromDisplayDomain(displayUnit, baselineDisplayTicks, lockedDomain.yMinDisplay, lockedDomain.yMaxDisplay);
+      if (this._hasValidDragDomain(dragDomain)) {
+        this._updateYDomainDuringDrag(dragDomain, displayUnit, baselineDisplayTicks);
         return;
       }
 
@@ -1194,21 +1299,44 @@
 
     _rightLineLabelCandidates(tEnd) {
       return [
-        {text: 'Revenue', color: COLORS.black, targetY: this._yFromValue(this._revenueAt(tEnd)), dy: 4},
-        {text: 'Total expenses', color: COLORS.black, targetY: this._yFromValue(this._totalAt(tEnd)), dy: -6},
         {
+          key: 'revenue',
+          text: 'Revenue',
+          color: COLORS.revenue,
+          column: 'outside',
+          targetY: this._yFromValue(this._revenueAt(tEnd)),
+          dy: 4
+        },
+        {
+          key: 'total',
+          text: 'Total expenses',
+          color: COLORS.total,
+          column: 'outside',
+          targetY: this._yFromValue(this._totalAt(tEnd)),
+          dy: -6
+        },
+        {
+          key: 'fixed',
           text: 'Fixed expenses',
-          color: COLORS.black,
+          color: COLORS.fixed,
+          column: 'inside',
           targetY: this._yFromValue(this.state.weeklyFixedExpenses),
           dy: -4
         },
-        {text: 'Variable expenses', color: COLORS.black, targetY: this._yFromValue(this._variableAt(tEnd)), dy: 10}
+        {
+          key: 'variable',
+          text: 'Variable expenses',
+          color: COLORS.variable,
+          column: 'inside',
+          targetY: this._yFromValue(this._variableAt(tEnd)),
+          dy: 10
+        }
       ].filter(function (candidate) {
         return isFiniteNumber(candidate.targetY);
       });
     };
 
-    _layoutRightLineLabels(candidates, minY, maxY, minGap) {
+    _layoutLineLabelsY(candidates, minY, maxY, minGap) {
       if (!candidates.length) {
         return [];
       }
@@ -1222,8 +1350,10 @@
           let idealY = clamp(candidate.targetY + (candidate.dy || 0), minY, maxY);
           let leaderStartY = clamp(candidate.targetY, minY, maxY);
           return {
+            key: candidate.key,
             text: candidate.text,
             color: candidate.color,
+            column: candidate.column,
             targetY: candidate.targetY,
             idealY: idealY,
             leaderStartY: leaderStartY,
@@ -1252,15 +1382,58 @@
       return sorted;
     };
 
-    _renderRightLineLabels(group, labels, xLabel, plotRightX) {
+    _layoutRightLineLabels(candidates, minY, maxY, minGap) {
+      return this._layoutLineLabelsY(candidates, minY, maxY, minGap);
+    };
+
+    _layoutInlineLineLabels(candidates, minY, maxY, minGap) {
+      return this._layoutLineLabelsY(candidates, minY, maxY, minGap);
+    };
+
+    _inlineLineLabelCandidates(tLabel) {
+      return [
+        {text: 'Revenue', color: COLORS.revenue, targetY: this._yFromValue(this._revenueAt(tLabel)), dy: -6},
+        {text: 'Total expenses', color: COLORS.total, targetY: this._yFromValue(this._totalAt(tLabel)), dy: 8},
+        {text: 'Variable expenses', color: COLORS.variable, targetY: this._yFromValue(this._variableAt(tLabel)), dy: 10},
+        {text: 'Fixed expenses', color: COLORS.fixed, targetY: this._yFromValue(this.state.weeklyFixedExpenses), dy: -4}
+      ].filter(function (candidate) {
+        return isFiniteNumber(candidate.targetY);
+      });
+    };
+
+    _renderInlineLineLabels(group, labels, xLabel) {
       labels.forEach(function (item) {
+        let text = createSvgEl('text');
+        text.textContent = item.text;
+        setAttrs(text, {
+          x: xLabel,
+          y: item.y,
+          fill: item.color,
+          'font-size': 10,
+          'font-weight': 700,
+          'text-anchor': 'start',
+          'paint-order': 'stroke',
+          stroke: COLORS.white,
+          'stroke-width': 3,
+          'stroke-linejoin': 'round',
+          'pointer-events': 'none'
+        });
+        group.appendChild(text);
+      });
+    };
+
+    _renderRightLineLabels(group, labels, plotRightX) {
+      labels.forEach(function (item) {
+        let x = isFiniteNumber(item.x) ? item.x : plotRightX + 6;
+        let anchor = item.anchor === 'end' ? 'end' : 'start';
         let hasDisplacement = Math.abs(item.y - item.idealY) > 1;
         if (hasDisplacement) {
+          let leaderEndX = anchor === 'end' ? x + 2 : x - 2;
           let leader = createSvgEl('line');
           setAttrs(leader, {
             x1: plotRightX + 1,
             y1: item.leaderStartY,
-            x2: xLabel - 2,
+            x2: leaderEndX,
             y2: item.y,
             stroke: item.color,
             'stroke-width': 1,
@@ -1272,12 +1445,12 @@
         let text = createSvgEl('text');
         text.textContent = item.text;
         setAttrs(text, {
-          x: xLabel,
+          x: x,
           y: item.y,
           fill: item.color,
           'font-size': 10,
           'font-weight': 700,
-          'text-anchor': 'start'
+          'text-anchor': anchor
         });
         group.appendChild(text);
       });
@@ -1288,8 +1461,7 @@
         let unitToken = UNIT_TOKEN_BY_ID[this.state.units] || 'Growth';
         let displayGrowth = growthFromWeekly(this.state.weeklyGrowthRate, this.state.units);
         let growthText = formatInputPercent(displayGrowth);
-        let growthPrefix = displayGrowth > 0 && growthText.charAt(0) !== '-' ? '+' : '';
-        return unitToken + ' ' + growthPrefix + growthText;
+        return growthText + ' ' + unitToken;
       }
 
       if (handle === 'variable') {
@@ -1302,6 +1474,19 @@
       }
 
       return '';
+    };
+
+    _handleLabelColor(handle) {
+      if (handle === 'growth') {
+        return COLORS.revenue;
+      }
+      if (handle === 'variable') {
+        return COLORS.variable;
+      }
+      if (handle === 'fixed') {
+        return COLORS.fixed;
+      }
+      return COLORS.black;
     };
 
     _handleLabelLayout(handle, point, bounds) {
@@ -1351,7 +1536,7 @@
       setAttrs(label, {
         x: layout.x,
         y: layout.y,
-        fill: COLORS.black,
+        fill: this._handleLabelColor(activeHandle),
         'font-size': 10,
         'font-weight': 700,
         'text-anchor': layout.anchor,
@@ -1373,6 +1558,8 @@
       let gLines = this.nodes.svgGroups.lines;
       let gLabels = this.nodes.svgGroups.labels;
       let gHandles = this.nodes.svgGroups.handles;
+      // Metrics contract: object => use for metric-dependent draw parts, null/undefined => skip them.
+      let drawMetrics = metrics;
 
       gGrid.innerHTML = '';
       gAxes.innerHTML = '';
@@ -1546,8 +1733,8 @@
         stroke: COLORS.variableLight,
         width: 2.5,
         title: 'Variable expenses',
-        dasharray: '2 4',
-        strokeOpacity: 0.6
+        dasharray: EXPENSE_SERIES_DASHARRAY,
+        strokeOpacity: EXPENSE_SERIES_OPACITY
       });
       addLine({
         points: this._lineSegmentPath(function () {
@@ -1556,8 +1743,8 @@
         stroke: COLORS.fixedLight,
         width: 2.5,
         title: 'Fixed expenses',
-        dasharray: '2 4',
-        strokeOpacity: 0.6
+        dasharray: EXPENSE_SERIES_DASHARRAY,
+        strokeOpacity: EXPENSE_SERIES_OPACITY
       });
       addLine({
         points: this._linePath(this._totalAt),
@@ -1568,17 +1755,42 @@
       });
 
       let tEnd = this.chart.tMax - this.chart.tMin;
-      let xLabel = this._xFromTime(tEnd) + 6;
-      let rightLabelPositions = this._layoutRightLineLabels(
-        this._rightLineLabelCandidates(tEnd),
-        plotTopY + AXIS_LABEL_TOP_CLEARANCE,
-        plotBottomY - 2,
-        RIGHT_LINE_LABEL_MIN_GAP
-      );
-      this._renderRightLineLabels(gLabels, rightLabelPositions, xLabel, plotRightX);
+      let activeHandle = this.drag && this.drag.handle ? this.drag.handle : '';
+      let labelMinY = plotTopY + AXIS_LABEL_TOP_CLEARANCE;
+      let labelMaxY = plotBottomY - 2;
 
-      let drawMetrics = metrics || this._computeMetrics();
-      if (isFiniteNumber(drawMetrics.breakevenYears) && drawMetrics.breakevenYears <= tEnd) {
+      let inlineLabelT = tEnd * INLINE_LINE_LABEL_T_RATIO;
+      let inlineLabelCandidates = this._inlineLineLabelCandidates(inlineLabelT);
+      let inlineLabels = this._layoutInlineLineLabels(inlineLabelCandidates, labelMinY, labelMaxY, INLINE_LINE_LABEL_MIN_GAP);
+      let inlineLabelX = this._xFromTime(inlineLabelT) + 8;
+      this._renderInlineLineLabels(gLabels, inlineLabels, inlineLabelX);
+
+      let rightLabelCandidates = this._rightLineLabelCandidates(tEnd).filter(function (candidate) {
+        let isSuppressed = (activeHandle === 'fixed' && candidate.key === 'fixed') ||
+          (activeHandle === 'variable' && candidate.key === 'variable');
+        return !isSuppressed;
+      });
+      let outsideCandidates = rightLabelCandidates.filter(function (candidate) {
+        return candidate.column === 'outside';
+      });
+      let insideCandidates = rightLabelCandidates.filter(function (candidate) {
+        return candidate.column === 'inside';
+      });
+      let outsideLabels = this._layoutRightLineLabels(outsideCandidates, labelMinY, labelMaxY, RIGHT_LINE_LABEL_MIN_GAP)
+        .map(function (item) {
+          item.x = plotRightX + 6;
+          item.anchor = 'start';
+          return item;
+        });
+      let insideLabels = this._layoutRightLineLabels(insideCandidates, labelMinY, labelMaxY, RIGHT_LINE_LABEL_MIN_GAP)
+        .map(function (item) {
+          item.x = plotRightX - (HANDLE_RECT_VISUAL_WIDTH / 2 + RIGHT_LABEL_INSIDE_PADDING_FROM_HANDLE);
+          item.anchor = 'end';
+          return item;
+        });
+      this._renderRightLineLabels(gLabels, outsideLabels.concat(insideLabels), plotRightX);
+
+      if (drawMetrics && isFiniteNumber(drawMetrics.breakevenYears) && drawMetrics.breakevenYears <= tEnd) {
         let bx = this._xFromTime(drawMetrics.breakevenYears);
         let by = this._yFromValue(this._revenueAt(drawMetrics.breakevenYears));
 
@@ -1598,9 +1810,9 @@
        * Rectangular drag handle (revenue/fixed/variable).
        */
       function addHandleRect(name, x, y, color) {
-        const visualW = 22;
-        const visualH = 16;
-        const hitPad = 8;
+        const visualW = HANDLE_RECT_VISUAL_WIDTH;
+        const visualH = HANDLE_RECT_VISUAL_HEIGHT;
+        const hitPad = HANDLE_RECT_HIT_PADDING;
 
         // Wider invisible hover area improves drag grab reliability.
         let hit = createSvgEl('rect');
@@ -1715,25 +1927,38 @@
       addHandleRect('variable', handlePoints.variable.x, handlePoints.variable.y, COLORS.variable);
       addHandleCircle('growth', handlePoints.growth.x, handlePoints.growth.y, COLORS.revenue);
 
-      let activeHandle = this.drag && this.drag.handle ? this.drag.handle : '';
-      this._renderActiveHandleLabel(gHandles, activeHandle, handlePoints, {
+      let handleLabelBounds = {
         minX: this.chart.paddingLeft + 8,
         maxX: plotRightX - 8,
         minY: plotTopY + AXIS_LABEL_TOP_CLEARANCE,
         maxY: plotBottomY - 6
-      });
+      };
+      this._renderActiveHandleLabel(gHandles, 'growth', handlePoints, handleLabelBounds);
+
+      let isExpenseHandleActive = activeHandle === 'fixed' || activeHandle === 'variable';
+      if (!isExpenseHandleActive) {
+        return;
+      }
+      this._renderActiveHandleLabel(gHandles, activeHandle, handlePoints, handleLabelBounds);
     };
 
     /**
      * Main update cycle: input -> domain -> draw -> KPI.
      */
-    render() {
-      this._updateInputs();
-      this._updateYDomain();
-      let metrics = this._computeMetrics();
+    render(options) {
+      let opts = options || {};
+      if (!opts.skipInputs) {
+        this._updateInputs();
+      }
+      if (!opts.skipYDomain) {
+        this._updateYDomain();
+      }
+      let metrics = opts.skipKpis ? null : this._computeMetrics();
       this._draw(metrics);
-      this.nodes.summaryBreakeven.textContent = this._formatTime(metrics.breakevenYears);
-      this.nodes.summaryBillion.textContent = this._formatTime(metrics.billionYears);
+      if (!opts.skipKpis && metrics !== null) {
+        this.nodes.summaryBreakeven.textContent = this._formatTime(metrics.breakevenYears);
+        this.nodes.summaryBillion.textContent = this._formatTime(metrics.billionYears);
+      }
     }
 
   }
