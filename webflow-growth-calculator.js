@@ -1473,7 +1473,7 @@
           key: 'fixed',
           title: 'Fixed expenses',
           endWeekly: fixedEndWeekly,
-          color: COLORS.fixed,
+          color: COLORS.darkGrey,
           column: 'inside',
           targetY: this._yFromValue(fixedEndWeekly),
           dy: -4
@@ -1599,7 +1599,11 @@
           fill: item.color,
           'font-size': 10,
           'font-weight': 700,
-          'text-anchor': anchor
+          'text-anchor': anchor,
+          'paint-order': 'stroke',
+          stroke: COLORS.white,
+          'stroke-width': 3,
+          'stroke-linejoin': 'round'
         });
         group.appendChild(text);
       }, this);
@@ -1659,8 +1663,9 @@
       if (isExpenseHandle) {
         let leftOffsetX = point.x - 12;
         let flipToRight = leftOffsetX < bounds.minX + 24;
+        let yOffset = handle === 'variable' ? 14 : -8;
         layout.x = flipToRight ? point.x + 12 : leftOffsetX;
-        layout.y = point.y - 8;
+        layout.y = point.y + yOffset;
         layout.anchor = flipToRight ? 'start' : 'end';
       }
 
@@ -1927,15 +1932,10 @@
           (activeHandle === 'variable' && candidate.key === 'variable');
         return !isSuppressed;
       });
-      let outsideCandidates = rightLabelCandidates.filter(function (candidate) {
-        return candidate.column === 'outside';
-      });
-      let insideCandidates = rightLabelCandidates.filter(function (candidate) {
-        return candidate.column === 'inside';
-      });
-      let outsideLabels = this._layoutRightLineLabels(outsideCandidates, labelMinY, labelMaxY, RIGHT_LINE_LABEL_MIN_GAP);
-      let insideLabels = this._layoutRightLineLabels(insideCandidates, labelMinY, labelMaxY, RIGHT_LINE_LABEL_MIN_GAP);
-      let positionedRightLabels = this._positionRightLineLabels(outsideLabels.concat(insideLabels), plotRightX);
+
+      // Layout all right-edge labels together so inside/outside columns don't collide when values align.
+      let laidOutRightLabels = this._layoutRightLineLabels(rightLabelCandidates, labelMinY, labelMaxY, RIGHT_LINE_LABEL_MIN_GAP);
+      let positionedRightLabels = this._positionRightLineLabels(laidOutRightLabels, plotRightX);
       let rightLabelLeaderStartX = plotRightX - 1;
       this._renderRightLineLabels(gLabels, positionedRightLabels, rightLabelLeaderStartX);
 
