@@ -25,6 +25,7 @@
   // IMPORTANT: internal calculations run in weekly units (weekly core).
   const DEFAULTS = {
     units: 'week',
+    expenseViz: 'bars',
     weeklyRevenue0: 100,
     weeklyGrowthRate: 0.0353,
     grossMargin: 1,
@@ -104,6 +105,10 @@
    */
   function isValidUnit(units) {
     return units === 'week' || units === 'month' || units === 'quarter' || units === 'year';
+  }
+
+  function isValidExpenseViz(expenseViz) {
+    return expenseViz === 'bars' || expenseViz === 'lines';
   }
 
   /**
@@ -239,6 +244,13 @@
     return (value < 0 ? '-$' : '$') + text + suffix;
   }
 
+  function formatIntegerWithCommas(intValue) {
+    if (!isFiniteNumber(intValue)) {
+      return '0';
+    }
+    return String(intValue).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  }
+
   /**
    * Formats a money value for input text.
    */
@@ -246,7 +258,9 @@
     if (!isFiniteNumber(value)) {
       return '$0';
     }
-    return '$' + Math.max(0, value).toFixed(0);
+    let clamped = Math.max(0, value);
+    let rounded = Math.round(clamped);
+    return '$' + formatIntegerWithCommas(rounded);
   }
 
   /**
@@ -268,6 +282,13 @@
     }
     let normalized = text.replace(/[^0-9.\-]/g, '');
     return Number(normalized);
+  }
+
+  function sanitizeMoneyInputDisplayValue(value) {
+    if (!isFiniteNumber(value)) {
+      return NaN;
+    }
+    return Math.round(Math.max(0, value));
   }
 
   /**
@@ -382,6 +403,7 @@
       this.state.yearsMin = yearsMin;
       this.state.yearsMax = yearsMax;
       this.state.units = isValidUnit(this.state.units) ? this.state.units : 'year';
+      this.state.expenseViz = isValidExpenseViz(this.state.expenseViz) ? this.state.expenseViz : DEFAULTS.expenseViz;
       this._normalizeStateToUnitDomain();
 
       this.drag = null;
@@ -455,12 +477,39 @@
         input.type = 'radio';
         input.name = unitRadioGroupName;
         input.value = unit.id;
+        input.dataset.group = 'units';
         if (unit.id === self.state.units) {
           input.checked = true;
         }
 
         let text = document.createElement('span');
         text.textContent = unit.label;
+
+        label.appendChild(input);
+        label.appendChild(text);
+        radios.appendChild(label);
+      });
+
+      let expenseVizOptions = [
+        {id: 'bars', label: 'Expenses: Bars'},
+        {id: 'lines', label: 'Expenses: Lines'}
+      ];
+      let expenseVizRadioGroupName = 'igc-expense-viz-' + String(Math.random()).slice(2);
+      expenseVizOptions.forEach(function (option) {
+        let label = document.createElement('label');
+        label.className = 'igc__radio';
+
+        let input = document.createElement('input');
+        input.type = 'radio';
+        input.name = expenseVizRadioGroupName;
+        input.value = option.id;
+        input.dataset.group = 'expenseViz';
+        if (option.id === self.state.expenseViz) {
+          input.checked = true;
+        }
+
+        let text = document.createElement('span');
+        text.textContent = option.label;
 
         label.appendChild(input);
         label.appendChild(text);
@@ -558,13 +607,28 @@
     _bind() {
       let self = this;
 
-      this.nodes.radios.querySelectorAll('input[type="radio"]').forEach(function (radio) {
+      this.nodes.radios.querySelectorAll('input[type="radio"][data-group="units"]').forEach(function (radio) {
         radio.addEventListener('change', function () {
           if (radio.checked) {
             self.state.units = radio.value;
             self._normalizeStateToUnitDomain();
             self.render();
           }
+        });
+      });
+
+      this.nodes.radios.querySelectorAll('input[type="radio"][data-group="expenseViz"]').forEach(function (radio) {
+        radio.addEventListener('change', function () {
+          if (!radio.checked) {
+            return;
+          }
+          let next = radio.value;
+          let resolved = isValidExpenseViz(next) ? next : DEFAULTS.expenseViz;
+          if (resolved === self.state.expenseViz) {
+            return;
+          }
+          self.state.expenseViz = resolved;
+          self.render();
         });
       });
 
@@ -585,7 +649,7 @@
       }
 
       bindInput(this.nodes.inputRevenue, function (text) {
-        let displayValue = parseMoney(text);
+        let displayValue = sanitizeMoneyInputDisplayValue(parseMoney(text));
         if (!isFiniteNumber(displayValue)) {
           return;
         }
@@ -603,7 +667,7 @@
       });
 
       bindInput(this.nodes.inputFixed, function (text) {
-        let displayValue = parseMoney(text);
+        let displayValue = sanitizeMoneyInputDisplayValue(parseMoney(text));
         if (!isFiniteNumber(displayValue)) {
           return;
         }
@@ -1120,8 +1184,12 @@
       let displayGrowth = growthFromWeekly(this.state.weeklyGrowthRate, this.state.units);
       this.nodes.inputGrowth.value = formatInputPercent(displayGrowth);
 
-      this.nodes.radios.querySelectorAll('input[type="radio"]').forEach(function (radio) {
+      this.nodes.radios.querySelectorAll('input[type="radio"][data-group="units"]').forEach(function (radio) {
         radio.checked = radio.value === this.state.units;
+      }, this);
+
+      this.nodes.radios.querySelectorAll('input[type="radio"][data-group="expenseViz"]').forEach(function (radio) {
+        radio.checked = radio.value === this.state.expenseViz;
       }, this);
     };
 
@@ -1182,6 +1250,109 @@
       let lnMin = Math.log(this.chart.yMin);
       let lnMax = Math.log(this.chart.yMax);
       return Math.exp(lnMin + ratio * (lnMax - lnMin));
+    };
+
+    _expenseBarTimes() {
+      let span = this.chart.tMax - this.chart.tMin;
+      let hasFiniteSpan = isFiniteNumber(span) && span > 0;
+      if (!hasFiniteSpan) {
+        return [];
+      }
+
+      if (span < 2) {
+        return [span * 0.5];
+      }
+
+      let offsets = [span * 0.25, span * 0.5, span * 0.75];
+      let sampleTimes = offsets
+        .map(function (offsetYears) {
+          return Math.round(offsetYears);
+        })
+        .filter(function (offsetYears) {
+          return isFiniteNumber(offsetYears) && offsetYears >= 0 && offsetYears <= span;
+        })
+        .sort(function (a, b) {
+          return a - b;
+        })
+        .filter(function (offsetYears, index, arr) {
+          return index === 0 || offsetYears !== arr[index - 1];
+        });
+
+      sampleTimes = sampleTimes.filter(function (offsetYears) {
+        return offsetYears !== 0 && offsetYears !== span;
+      });
+
+      if (sampleTimes.length) {
+        return sampleTimes;
+      }
+
+      let midpointTime = span * 0.5;
+      let hasInteriorMidpoint = midpointTime > 0 && midpointTime < span;
+      return hasInteriorMidpoint ? [midpointTime] : [];
+    };
+
+    _yFromValueOrZero(value, plotBottomY) {
+      let shouldUseBaseline = !isFiniteNumber(value) || value <= 0;
+      if (shouldUseBaseline) {
+        return plotBottomY;
+      }
+      return this._yFromValue(value);
+    };
+
+    _drawExpenseBars(group, plotBottomY, yearSpacing) {
+      let hasTarget = group && isFiniteNumber(plotBottomY);
+      if (!hasTarget) {
+        return;
+      }
+
+      let sampleTimes = this._expenseBarTimes();
+      if (!sampleTimes.length) {
+        return;
+      }
+
+      let spacing = isFiniteNumber(yearSpacing) ? yearSpacing : 18;
+      let barWidth = clamp(spacing * 0.55, 10, 28);
+
+      sampleTimes.forEach(function (tYearsFromStart) {
+        let fixedWeekly = this.state.weeklyFixedExpenses;
+        let variableWeekly = this._variableAt(tYearsFromStart);
+        let totalWeekly = fixedWeekly + variableWeekly;
+
+        let yFixedTop = this._yFromValueOrZero(fixedWeekly, plotBottomY);
+        let yTotalTop = this._yFromValueOrZero(totalWeekly, plotBottomY);
+        let x = this._xFromTime(tYearsFromStart);
+        let xLeft = x - barWidth / 2;
+
+        let fixedTopY = Math.min(plotBottomY, yFixedTop);
+        let fixedHeight = Math.max(0, Math.abs(plotBottomY - yFixedTop));
+
+        let variableTopY = Math.min(yFixedTop, yTotalTop);
+        let variableHeight = Math.max(0, Math.abs(yFixedTop - yTotalTop));
+
+        let fixedRect = createSvgEl('rect');
+        setAttrs(fixedRect, {
+          x: xLeft,
+          y: fixedTopY,
+          width: barWidth,
+          height: fixedHeight,
+          fill: COLORS.fixedLight,
+          opacity: EXPENSE_SERIES_OPACITY,
+          'pointer-events': 'none'
+        });
+        group.appendChild(fixedRect);
+
+        let variableRect = createSvgEl('rect');
+        setAttrs(variableRect, {
+          x: xLeft,
+          y: variableTopY,
+          width: barWidth,
+          height: variableHeight,
+          fill: COLORS.variableLight,
+          opacity: EXPENSE_SERIES_OPACITY,
+          'pointer-events': 'none'
+        });
+        group.appendChild(variableRect);
+      }, this);
     };
 
     /**
@@ -1660,28 +1831,29 @@
       gAxes.appendChild(axisYears);
 
       /**
-       * Draws a visible stroke and a wide invisible hit layer for stable tooltips.
+       * Draws a line and a wide invisible hit layer for stable tooltips.
        */
       function addLine(config) {
         let points = config.points;
         let stroke = config.stroke;
         let width = config.width;
         let titleText = config.title;
-        let visible = createSvgEl('polyline');
-        setAttrs(visible, {
-          fill: 'none',
-          points: points,
-          stroke: stroke,
-          'stroke-width': width,
-          'stroke-linecap': 'round',
-          'stroke-linejoin': 'round',
-          opacity: config.strokeOpacity == null ? 1 : config.strokeOpacity,
-          'pointer-events': 'none'
-        });
-        if (config.dasharray) {
-          visible.setAttribute('stroke-dasharray', String(config.dasharray));
+        let shouldDrawVisible = config.showVisible !== false;
+        if (shouldDrawVisible) {
+          let visible = createSvgEl('polyline');
+          setAttrs(visible, {
+            fill: 'none',
+            points: points,
+            stroke: stroke,
+            'stroke-width': width,
+            'stroke-linecap': 'round',
+            'stroke-linejoin': 'round',
+            opacity: config.strokeOpacity == null ? 1 : config.strokeOpacity,
+            'pointer-events': 'none'
+          });
+          config.dasharray && visible.setAttribute('stroke-dasharray', String(config.dasharray));
+          gLines.appendChild(visible);
         }
-        gLines.appendChild(visible);
 
         // Keep hit stroke solid/wide so line hover remains easy.
         let hit = createSvgEl('polyline');
@@ -1706,6 +1878,10 @@
       }
 
       let tEnd = this.chart.tMax - this.chart.tMin;
+      let isBarsMode = this.state.expenseViz === 'bars';
+      if (isBarsMode) {
+        this._drawExpenseBars(gLines, plotBottomY, yearSpacing);
+      }
 
       addLine({
         points: this._lineSegmentPath(this._revenueAt),
@@ -1720,7 +1896,8 @@
         width: 2.5,
         title: 'Variable expenses',
         dasharray: EXPENSE_SERIES_DASHARRAY,
-        strokeOpacity: EXPENSE_SERIES_OPACITY
+        strokeOpacity: EXPENSE_SERIES_OPACITY,
+        showVisible: !isBarsMode
       });
       addLine({
         points: this._lineSegmentPath(function () {
@@ -1730,7 +1907,8 @@
         width: 2.5,
         title: 'Fixed expenses',
         dasharray: EXPENSE_SERIES_DASHARRAY,
-        strokeOpacity: EXPENSE_SERIES_OPACITY
+        strokeOpacity: EXPENSE_SERIES_OPACITY,
+        showVisible: !isBarsMode
       });
       addLine({
         points: this._lineKinkPath(this._totalAt, this._totalBreakTimeYears(tEnd)),
@@ -1873,19 +2051,21 @@
         gHandles.appendChild(circle);
       }
 
+      let startHandleT = 0;
+      let endHandleT = tEnd;
       let growthT = tEnd * 0.55;
       let handlePoints = {
         'revenue-start': {
-          x: this._xFromTime(0),
-          y: this._yFromValue(this._revenueAt(0))
+          x: this._xFromTime(startHandleT),
+          y: this._yFromValue(this._revenueAt(startHandleT))
         },
         fixed: {
-          x: this._xFromTime(0),
+          x: this._xFromTime(startHandleT),
           y: this._yFromValue(this.state.weeklyFixedExpenses)
         },
         variable: {
-          x: this._xFromTime(tEnd),
-          y: this._yFromValue(this._variableAt(tEnd))
+          x: this._xFromTime(endHandleT),
+          y: this._yFromValue(this._variableAt(endHandleT))
         },
         growth: {
           x: this._xFromTime(growthT),
