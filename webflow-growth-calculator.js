@@ -1204,12 +1204,54 @@
       return points.join(' ');
     };
 
+    _lineKinkPath(fn, tBreakYears) {
+      let tStart = 0;
+      let tEnd = this.chart.tMax - this.chart.tMin;
+      let safeBreak = isFiniteNumber(tBreakYears) ? tBreakYears : tEnd * 0.5;
+      let tBreak = clamp(safeBreak, tStart, tEnd);
+      let startPoint = this._xFromTime(tStart) + ',' + this._yFromValue(fn.call(this, tStart));
+      let breakPoint = this._xFromTime(tBreak) + ',' + this._yFromValue(fn.call(this, tBreak));
+      let endPoint = this._xFromTime(tEnd) + ',' + this._yFromValue(fn.call(this, tEnd));
+      return startPoint + ' ' + breakPoint + ' ' + endPoint;
+    };
+
     _lineSegmentPath(fn) {
       let tStart = 0;
       let tEnd = this.chart.tMax - this.chart.tMin;
       let startPoint = this._xFromTime(tStart) + ',' + this._yFromValue(fn.call(this, tStart));
       let endPoint = this._xFromTime(tEnd) + ',' + this._yFromValue(fn.call(this, tEnd));
       return startPoint + ' ' + endPoint;
+    };
+
+    _totalBreakTimeYears(tEndYears) {
+      let fallback = isFiniteNumber(tEndYears) && tEndYears > 0 ? tEndYears * 0.5 : 0;
+      let revenue0 = this.state.weeklyRevenue0;
+      let fixed = this.state.weeklyFixedExpenses;
+      let variableRatio = clamp(1 - this.state.grossMargin, 0, 1);
+      let variable0 = revenue0 * variableRatio;
+      let growthBase = 1 + this.state.weeklyGrowthRate;
+      let hasFiniteInputs = isFiniteNumber(revenue0) && isFiniteNumber(fixed) && isFiniteNumber(variable0) && isFiniteNumber(growthBase);
+      if (!hasFiniteInputs || revenue0 <= 0 || variableRatio <= 0 || fixed <= 0 || growthBase <= 0) {
+        return fallback;
+      }
+
+      let denominator = Math.log(growthBase);
+      if (!isFiniteNumber(denominator) || Math.abs(denominator) < 1e-12) {
+        return fallback;
+      }
+
+      let ratio = fixed / variable0;
+      if (!isFiniteNumber(ratio) || ratio <= 0) {
+        return fallback;
+      }
+
+      let solvedWeeks = Math.log(ratio) / denominator;
+      let solvedYears = solvedWeeks / WEEKS_PER_YEAR;
+      if (!isFiniteNumber(solvedYears)) {
+        return fallback;
+      }
+
+      return clamp(solvedYears, 0, Math.max(0, tEndYears));
     };
 
     _totalLineSegments() {
@@ -1663,6 +1705,8 @@
         gLines.appendChild(hit);
       }
 
+      let tEnd = this.chart.tMax - this.chart.tMin;
+
       addLine({
         points: this._lineSegmentPath(this._revenueAt),
         stroke: COLORS.revenue,
@@ -1689,14 +1733,13 @@
         strokeOpacity: EXPENSE_SERIES_OPACITY
       });
       addLine({
-        points: this._linePath(this._totalAt),
+        points: this._lineKinkPath(this._totalAt, this._totalBreakTimeYears(tEnd)),
         stroke: COLORS.total,
         width: 3.5,
         title: 'Total expenses',
         strokeOpacity: 1
       });
 
-      let tEnd = this.chart.tMax - this.chart.tMin;
       let activeHandle = this.drag && this.drag.handle ? this.drag.handle : '';
       let labelMinY = plotTopY + AXIS_LABEL_TOP_CLEARANCE;
       let labelMaxY = plotBottomY - 2;
