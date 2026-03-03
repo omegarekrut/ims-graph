@@ -54,6 +54,7 @@
   const AXIS_LABEL_TOP_CLEARANCE = 12;
   const MIN_X_YEAR_LABEL_GAP = 28;
   const RIGHT_LINE_LABEL_MIN_GAP = 14;
+  const MIN_BAR_LABEL_SEGMENT_HEIGHT = 14;
   const UNIT_TOKEN_BY_ID = {
     week: 'WoW',
     month: 'MoM',
@@ -77,7 +78,8 @@
 
   // Baseline Y-axis ticks in display units.
   const Y_TICKS_BY_UNIT = {
-    week: [100, 300, 1000, 3000, 10000, 30000, 100000, 300000, 1000000, 3000000, 10000000],
+    // Include sub-100 ticks so the visual 0->100 region isn't over-stretched.
+    week: [3, 10, 30, 100, 300, 1000, 3000, 10000, 30000, 100000, 300000, 1000000, 3000000, 10000000],
     month: [300, 1000, 3000, 10000, 30000, 100000, 300000, 1000000, 3000000, 10000000, 30000000],
     quarter: [3000, 10000, 30000, 100000, 300000, 1000000, 3000000, 10000000, 30000000, 100000000],
     year: [3000, 10000, 30000, 100000, 300000, 1000000, 3000000, 10000000, 30000000, 100000000, 300000000, 1000000000]
@@ -242,6 +244,20 @@
     let digits = scaled >= 1000 ? 0 : scaled >= 100 ? 1 : scaled >= 10 ? 2 : 2;
     let text = scaled.toFixed(digits).replace(/\.0+$/, '').replace(/(\.\d*[1-9])0+$/, '$1');
     return (value < 0 ? '-$' : '$') + text + suffix;
+  }
+
+  function formatBarMoney(displayValue) {
+    if (!isFiniteNumber(displayValue) || displayValue <= 0) {
+      return '';
+    }
+    return formatMoney(displayValue).replace(/^\$/, '');
+  }
+
+  function formatBarMoneyFromWeekly(weeklyValue, units) {
+    if (!isFiniteNumber(weeklyValue) || weeklyValue <= 0) {
+      return '';
+    }
+    return formatBarMoney(flowFromWeekly(weeklyValue, units));
   }
 
   function formatIntegerWithCommas(intValue) {
@@ -1254,41 +1270,16 @@
 
     _expenseBarTimes() {
       let span = this.chart.tMax - this.chart.tMin;
-      let hasFiniteSpan = isFiniteNumber(span) && span > 0;
-      if (!hasFiniteSpan) {
+      if (!isFiniteNumber(span) || span < 0) {
         return [];
       }
 
-      if (span < 2) {
-        return [span * 0.5];
+      let yearsSpan = Math.max(0, Math.round(span));
+      let times = [];
+      for (let yearOffset = 0; yearOffset <= yearsSpan; yearOffset += 1) {
+        times.push(yearOffset);
       }
-
-      let offsets = [span * 0.25, span * 0.5, span * 0.75];
-      let sampleTimes = offsets
-        .map(function (offsetYears) {
-          return Math.round(offsetYears);
-        })
-        .filter(function (offsetYears) {
-          return isFiniteNumber(offsetYears) && offsetYears >= 0 && offsetYears <= span;
-        })
-        .sort(function (a, b) {
-          return a - b;
-        })
-        .filter(function (offsetYears, index, arr) {
-          return index === 0 || offsetYears !== arr[index - 1];
-        });
-
-      sampleTimes = sampleTimes.filter(function (offsetYears) {
-        return offsetYears !== 0 && offsetYears !== span;
-      });
-
-      if (sampleTimes.length) {
-        return sampleTimes;
-      }
-
-      let midpointTime = span * 0.5;
-      let hasInteriorMidpoint = midpointTime > 0 && midpointTime < span;
-      return hasInteriorMidpoint ? [midpointTime] : [];
+      return times;
     };
 
     _yFromValueOrZero(value, plotBottomY) {
@@ -1299,8 +1290,47 @@
       return this._yFromValue(value);
     };
 
-    _drawExpenseBars(group, plotBottomY, yearSpacing) {
-      let hasTarget = group && isFiniteNumber(plotBottomY);
+    _valueFromYOrZero(y, plotBottomY) {
+      let hasFiniteInputs = isFiniteNumber(y) && isFiniteNumber(plotBottomY);
+      if (!hasFiniteInputs) {
+        return NaN;
+      }
+
+      // plotBottomY is the visual "$0" baseline for the log plot.
+      if (y >= plotBottomY - 0.01) {
+        return 0;
+      }
+
+      return this._finiteValueOrMax(this._yToValue(y));
+    };
+
+    _appendExpenseBarSegmentLabel(group, textValue, x, y, fillColor) {
+      let hasTarget = group && textValue && isFiniteNumber(x) && isFiniteNumber(y);
+      if (!hasTarget) {
+        return;
+      }
+
+      let label = createSvgEl('text');
+      let labelFill = fillColor || COLORS.black;
+      label.textContent = textValue;
+      setAttrs(label, {
+        x: x,
+        y: y,
+        fill: labelFill,
+        'font-size': 10,
+        'font-weight': 700,
+        'text-anchor': 'middle',
+        'paint-order': 'stroke',
+        stroke: COLORS.white,
+        'stroke-width': 3,
+        'stroke-linejoin': 'round',
+        'pointer-events': 'none'
+      });
+      group.appendChild(label);
+    };
+
+    _drawExpenseBars(barGroup, labelGroup, plotBottomY, yearSpacing) {
+      let hasTarget = barGroup && labelGroup && isFiniteNumber(plotBottomY);
       if (!hasTarget) {
         return;
       }
@@ -1310,36 +1340,34 @@
         return;
       }
 
+      let span = this.chart.tMax - this.chart.tMin;
+      if (!isFiniteNumber(span) || span <= 0) {
+        return;
+      }
+
+      let yVariableStart = this._yFromValueOrZero(this._variableAt(0), plotBottomY);
+      let yVariableEnd = this._yFromValueOrZero(this._variableAt(span), plotBottomY);
+      let yTotalStart = this._yFromValueOrZero(this._totalAt(0), plotBottomY);
+      let yTotalEnd = this._yFromValueOrZero(this._totalAt(span), plotBottomY);
+
       let spacing = isFiniteNumber(yearSpacing) ? yearSpacing : 18;
       let barWidth = clamp(spacing * 0.55, 10, 28);
+      let yearsSpan = isFiniteNumber(span) && span >= 0 ? Math.max(0, Math.round(span)) : 0;
+      let labelStep = Math.max(1, Math.ceil(44 / Math.max(1, spacing)));
 
       sampleTimes.forEach(function (tYearsFromStart) {
-        let fixedWeekly = this.state.weeklyFixedExpenses;
-        let variableWeekly = this._variableAt(tYearsFromStart);
-        let totalWeekly = fixedWeekly + variableWeekly;
+        let ratio = clamp(tYearsFromStart / span, 0, 1);
+        let yVariableTop = yVariableStart + ratio * (yVariableEnd - yVariableStart);
+        let yTotalTop = yTotalStart + ratio * (yTotalEnd - yTotalStart);
+        yTotalTop = Math.min(yTotalTop, yVariableTop);
 
-        let yFixedTop = this._yFromValueOrZero(fixedWeekly, plotBottomY);
-        let yTotalTop = this._yFromValueOrZero(totalWeekly, plotBottomY);
         let x = this._xFromTime(tYearsFromStart);
-        let xLeft = x - barWidth / 2;
+        let xLeft = clamp(x - barWidth / 2, this.chart.paddingLeft, this.chart.width - this.chart.paddingRight - barWidth);
 
-        let fixedTopY = Math.min(plotBottomY, yFixedTop);
-        let fixedHeight = Math.max(0, Math.abs(plotBottomY - yFixedTop));
-
-        let variableTopY = Math.min(yFixedTop, yTotalTop);
-        let variableHeight = Math.max(0, Math.abs(yFixedTop - yTotalTop));
-
-        let fixedRect = createSvgEl('rect');
-        setAttrs(fixedRect, {
-          x: xLeft,
-          y: fixedTopY,
-          width: barWidth,
-          height: fixedHeight,
-          fill: COLORS.fixedLight,
-          opacity: EXPENSE_SERIES_OPACITY,
-          'pointer-events': 'none'
-        });
-        group.appendChild(fixedRect);
+        let variableTopY = Math.min(plotBottomY, yVariableTop);
+        let variableHeight = Math.max(0, Math.abs(plotBottomY - yVariableTop));
+        let fixedTopY = Math.min(yVariableTop, yTotalTop);
+        let fixedHeight = Math.max(0, Math.abs(yVariableTop - yTotalTop));
 
         let variableRect = createSvgEl('rect');
         setAttrs(variableRect, {
@@ -1351,7 +1379,71 @@
           opacity: EXPENSE_SERIES_OPACITY,
           'pointer-events': 'none'
         });
-        group.appendChild(variableRect);
+        barGroup.appendChild(variableRect);
+
+        let fixedRect = createSvgEl('rect');
+        setAttrs(fixedRect, {
+          x: xLeft,
+          y: fixedTopY,
+          width: barWidth,
+          height: fixedHeight,
+          fill: COLORS.fixedLight,
+          opacity: EXPENSE_SERIES_OPACITY,
+          'pointer-events': 'none'
+        });
+        barGroup.appendChild(fixedRect);
+
+        let shouldLabelThisBar = (tYearsFromStart % labelStep === 0) || tYearsFromStart === 0 || tYearsFromStart === yearsSpan;
+        if (!shouldLabelThisBar) {
+          return;
+        }
+
+        let variableWeekly = this._valueFromYOrZero(yVariableTop, plotBottomY);
+        let totalWeekly = this._valueFromYOrZero(yTotalTop, plotBottomY);
+        let remainderWeekly = (isFiniteNumber(totalWeekly) && isFiniteNumber(variableWeekly))
+          ? Math.max(0, totalWeekly - variableWeekly)
+          : NaN;
+
+        let variableLabelText = variableHeight >= MIN_BAR_LABEL_SEGMENT_HEIGHT
+          ? formatBarMoneyFromWeekly(variableWeekly, this.state.units)
+          : '';
+        let fixedLabelText = fixedHeight >= MIN_BAR_LABEL_SEGMENT_HEIGHT
+          ? formatBarMoneyFromWeekly(remainderWeekly, this.state.units)
+          : '';
+
+        if (variableLabelText) {
+          let variableBottomY = variableTopY + variableHeight;
+          let variableLabelY = clamp(
+            plotBottomY - 6,
+            variableTopY + 10,
+            variableBottomY - 4
+          );
+          this._appendExpenseBarSegmentLabel(
+            labelGroup,
+            variableLabelText,
+            xLeft + barWidth / 2,
+            variableLabelY,
+            COLORS.variable
+          );
+        }
+
+        if (!fixedLabelText) {
+          return;
+        }
+
+        let fixedBottomY = fixedTopY + fixedHeight;
+        let fixedLabelY = clamp(
+          fixedTopY + fixedHeight / 2 + 4,
+          fixedTopY + 10,
+          fixedBottomY - 4
+        );
+        this._appendExpenseBarSegmentLabel(
+          labelGroup,
+          fixedLabelText,
+          xLeft + barWidth / 2,
+          fixedLabelY,
+          COLORS.total
+        );
       }, this);
     };
 
@@ -1375,54 +1467,12 @@
       return points.join(' ');
     };
 
-    _lineKinkPath(fn, tBreakYears) {
-      let tStart = 0;
-      let tEnd = this.chart.tMax - this.chart.tMin;
-      let safeBreak = isFiniteNumber(tBreakYears) ? tBreakYears : tEnd * 0.5;
-      let tBreak = clamp(safeBreak, tStart, tEnd);
-      let startPoint = this._xFromTime(tStart) + ',' + this._yFromValue(fn.call(this, tStart));
-      let breakPoint = this._xFromTime(tBreak) + ',' + this._yFromValue(fn.call(this, tBreak));
-      let endPoint = this._xFromTime(tEnd) + ',' + this._yFromValue(fn.call(this, tEnd));
-      return startPoint + ' ' + breakPoint + ' ' + endPoint;
-    };
-
     _lineSegmentPath(fn) {
       let tStart = 0;
       let tEnd = this.chart.tMax - this.chart.tMin;
       let startPoint = this._xFromTime(tStart) + ',' + this._yFromValue(fn.call(this, tStart));
       let endPoint = this._xFromTime(tEnd) + ',' + this._yFromValue(fn.call(this, tEnd));
       return startPoint + ' ' + endPoint;
-    };
-
-    _totalBreakTimeYears(tEndYears) {
-      let fallback = isFiniteNumber(tEndYears) && tEndYears > 0 ? tEndYears * 0.5 : 0;
-      let revenue0 = this.state.weeklyRevenue0;
-      let fixed = this.state.weeklyFixedExpenses;
-      let variableRatio = clamp(1 - this.state.grossMargin, 0, 1);
-      let variable0 = revenue0 * variableRatio;
-      let growthBase = 1 + this.state.weeklyGrowthRate;
-      let hasFiniteInputs = isFiniteNumber(revenue0) && isFiniteNumber(fixed) && isFiniteNumber(variable0) && isFiniteNumber(growthBase);
-      if (!hasFiniteInputs || revenue0 <= 0 || variableRatio <= 0 || fixed <= 0 || growthBase <= 0) {
-        return fallback;
-      }
-
-      let denominator = Math.log(growthBase);
-      if (!isFiniteNumber(denominator) || Math.abs(denominator) < 1e-12) {
-        return fallback;
-      }
-
-      let ratio = fixed / variable0;
-      if (!isFiniteNumber(ratio) || ratio <= 0) {
-        return fallback;
-      }
-
-      let solvedWeeks = Math.log(ratio) / denominator;
-      let solvedYears = solvedWeeks / WEEKS_PER_YEAR;
-      if (!isFiniteNumber(solvedYears)) {
-        return fallback;
-      }
-
-      return clamp(solvedYears, 0, Math.max(0, tEndYears));
     };
 
     _totalLineSegments() {
@@ -1885,7 +1935,7 @@
       let tEnd = this.chart.tMax - this.chart.tMin;
       let isBarsMode = this.state.expenseViz === 'bars';
       if (isBarsMode) {
-        this._drawExpenseBars(gLines, plotBottomY, yearSpacing);
+        this._drawExpenseBars(gLines, gLabels, plotBottomY, yearSpacing);
       }
 
       addLine({
@@ -1916,7 +1966,7 @@
         showVisible: !isBarsMode
       });
       addLine({
-        points: this._lineKinkPath(this._totalAt, this._totalBreakTimeYears(tEnd)),
+        points: this._lineSegmentPath(this._totalAt),
         stroke: COLORS.total,
         width: 3.5,
         title: 'Total expenses',
