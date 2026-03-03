@@ -45,10 +45,12 @@
   const PROJECTION_SOFT_CAP_WEEKLY = 1e30;
   const MIN_WEEKLY_LOG_FLOOR = 1e-9;
   const MIN_DISPLAY_Y_FLOOR_BY_UNIT = {
-    week: 1,
-    month: 1,
-    quarter: 1,
-    year: 1
+    // Keep the "$0" baseline while compressing the first tick gap.
+    // This makes the 0->first-tick interval feel consistent with the rest of the log scale.
+    week: 30,
+    month: 90,
+    quarter: 900,
+    year: 900
   };
   const MIN_Y_TICK_GAP = 14;
   const AXIS_LABEL_TOP_CLEARANCE = 12;
@@ -78,8 +80,7 @@
 
   // Baseline Y-axis ticks in display units.
   const Y_TICKS_BY_UNIT = {
-    // Include sub-100 ticks so the visual 0->100 region isn't over-stretched.
-    week: [3, 10, 30, 100, 300, 1000, 3000, 10000, 30000, 100000, 300000, 1000000, 3000000, 10000000],
+    week: [100, 300, 1000, 3000, 10000, 30000, 100000, 300000, 1000000, 3000000, 10000000],
     month: [300, 1000, 3000, 10000, 30000, 100000, 300000, 1000000, 3000000, 10000000, 30000000],
     quarter: [3000, 10000, 30000, 100000, 300000, 1000000, 3000000, 10000000, 30000000, 100000000],
     year: [3000, 10000, 30000, 100000, 300000, 1000000, 3000000, 10000000, 30000000, 100000000, 300000000, 1000000000]
@@ -601,6 +602,8 @@
       });
 
       this.nodes.svgGroups = groups;
+      let displayUnit = this.state.units;
+      let yMinDisplay = MIN_DISPLAY_Y_FLOOR_BY_UNIT[displayUnit] || 1;
       this.chart = {
         width: 1224,
         height: 420,
@@ -611,8 +614,8 @@
         // X axis always uses years.
         tMin: this.state.yearsMin,
         tMax: this.state.yearsMax,
-        yMin: flowToWeekly(Y_TICKS_BY_UNIT[this.state.units][0], this.state.units),
-        yMax: flowToWeekly(Y_MAX_BY_UNIT[this.state.units] || Y_MAX_BY_UNIT.year, this.state.units),
+        yMin: flowToWeekly(yMinDisplay, displayUnit),
+        yMax: flowToWeekly(Y_MAX_BY_UNIT[displayUnit] || Y_MAX_BY_UNIT.year, displayUnit),
         ticksY: []
       };
     };
@@ -1958,12 +1961,12 @@
         points: this._lineSegmentPath(function () {
           return this.state.weeklyFixedExpenses;
         }),
-        stroke: COLORS.fixedLight,
+        stroke: COLORS.fixed,
         width: 2.5,
         title: 'Fixed expenses',
         dasharray: EXPENSE_SERIES_DASHARRAY,
         strokeOpacity: EXPENSE_SERIES_OPACITY,
-        showVisible: !isBarsMode
+        showVisible: true
       });
       addLine({
         points: this._lineSegmentPath(this._totalAt),
