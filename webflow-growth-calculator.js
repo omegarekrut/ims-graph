@@ -34,13 +34,6 @@
     yearsMax: 9
   };
 
-  // Legacy Y-axis maxima by active unit.
-  const Y_MAX_BY_UNIT = {
-    week: 10000000,
-    month: 30000000,
-    quarter: 100000000,
-    year: 1000000000
-  };
   const MAX_FINITE_FLOW = Number.MAX_VALUE;
   const PROJECTION_SOFT_CAP_WEEKLY = 1e30;
   const MIN_WEEKLY_LOG_FLOOR = 1e-9;
@@ -77,6 +70,8 @@
     skipKpis: true,
     skipYDomain: true
   });
+  const DRAG_Y_EXPAND_TRIGGER_OFFSET = 2;
+  const DRAG_Y_EXPAND_RESET_OFFSET = 16;
 
   // Baseline Y-axis ticks in display units.
   const Y_TICKS_BY_UNIT = {
@@ -202,6 +197,66 @@
     return Math.min(value, maxResult);
   }
 
+  function formatIntegerStringWithCommas(integerDigits) {
+    if (typeof integerDigits !== 'string' || integerDigits === '') {
+      return '0';
+    }
+    if (!/^\d+$/.test(integerDigits)) {
+      return '0';
+    }
+    return integerDigits.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  }
+
+  function splitMoneyDisplayParts(formattedMoney) {
+    if (typeof formattedMoney !== 'string' || formattedMoney === '') {
+      return null;
+    }
+
+    let source = formattedMoney;
+    let signPrefix = '';
+    if (source.indexOf('-$') === 0) {
+      signPrefix = '-$';
+      source = source.slice(2);
+    } else if (source.indexOf('$') === 0) {
+      signPrefix = '$';
+      source = source.slice(1);
+    } else {
+      return null;
+    }
+
+    let dotIndex = source.indexOf('.');
+    let integerPart = dotIndex < 0 ? source : source.slice(0, dotIndex);
+    let normalizedIntegerPart = integerPart.replace(/,/g, '');
+    if (!/^\d+$/.test(normalizedIntegerPart)) {
+      return null;
+    }
+    if (dotIndex >= 0 && !/^\.\d+$/.test(source.slice(dotIndex))) {
+      return null;
+    }
+
+    if (dotIndex < 0) {
+      return {
+        signPrefix: signPrefix,
+        integerPart: normalizedIntegerPart,
+        fractionalPart: ''
+      };
+    }
+
+    return {
+      signPrefix: signPrefix,
+      integerPart: normalizedIntegerPart,
+      fractionalPart: source.slice(dotIndex)
+    };
+  }
+
+  function formatMoneyWithCommas(formattedMoney) {
+    let parts = splitMoneyDisplayParts(formattedMoney);
+    if (!parts) {
+      return typeof formattedMoney === 'string' ? formattedMoney : '$0';
+    }
+    return parts.signPrefix + formatIntegerStringWithCommas(parts.integerPart) + parts.fractionalPart;
+  }
+
   /**
    * Formats money for axes and labels with compact suffixes.
    */
@@ -244,7 +299,11 @@
 
     let digits = scaled >= 1000 ? 0 : scaled >= 100 ? 1 : scaled >= 10 ? 2 : 2;
     let text = scaled.toFixed(digits).replace(/\.0+$/, '').replace(/(\.\d*[1-9])0+$/, '$1');
-    return (value < 0 ? '-$' : '$') + text + suffix;
+    let formattedMoney = (value < 0 ? '-$' : '$') + text + suffix;
+    if (suffix) {
+      return formattedMoney;
+    }
+    return formatMoneyWithCommas(formattedMoney);
   }
 
   function formatBarMoney(displayValue) {
@@ -265,7 +324,9 @@
     if (!isFiniteNumber(intValue)) {
       return '0';
     }
-    return String(intValue).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    let sign = intValue < 0 ? '-' : '';
+    let digits = String(Math.trunc(Math.abs(intValue)));
+    return sign + formatIntegerStringWithCommas(digits);
   }
 
   /**
@@ -394,6 +455,63 @@
     return normalizeTicks(ticks, min, max, targetCount);
   }
 
+  function snapUpOneThree(value) {
+    if (!isFiniteNumber(value) || value <= 0) {
+      return 1;
+    }
+
+    let exponent = Math.floor(Math.log10(value));
+    let scale = Math.pow(10, exponent);
+    let normalized = value / scale;
+    if (normalized <= 1) {
+      return scale;
+    }
+    if (normalized <= 3) {
+      return 3 * scale;
+    }
+    return 10 * scale;
+  }
+
+  function nextOneThreeTick(tick) {
+    if (!isFiniteNumber(tick) || tick <= 0) {
+      return 1;
+    }
+
+    let exponent = Math.floor(Math.log10(tick));
+    let scale = Math.pow(10, exponent);
+    let normalized = tick / scale;
+    if (normalized < 1.5) {
+      return 3 * scale;
+    }
+    return 10 * scale;
+  }
+
+  function extendBaselineOneThreeTicks(baselineTicks, maxDisplay) {
+    let ticks = (baselineTicks || [])
+      .filter(function (tick) {
+        return isFiniteNumber(tick) && tick > 0;
+      })
+      .sort(function (a, b) {
+        return a - b;
+      })
+      .filter(function (tick, idx, arr) {
+        return idx === 0 || Math.abs(tick - arr[idx - 1]) > 1e-9;
+      });
+
+    let safeMax = isFiniteNumber(maxDisplay) && maxDisplay > 0 ? maxDisplay : 1;
+    if (!ticks.length) {
+      return createOneThreeTicks(1, safeMax, 8);
+    }
+
+    let extended = ticks.slice();
+    let guard = 0;
+    while (extended[extended.length - 1] < safeMax && guard < 64) {
+      extended.push(nextOneThreeTick(extended[extended.length - 1]));
+      guard += 1;
+    }
+    return extended;
+  }
+
   /**
    * Main chart class:
    * - keeps state
@@ -445,7 +563,8 @@
       style.textContent = '' +
         '.igc{font-family:Inter,Segoe UI,Arial,sans-serif;color:' + COLORS.black + ';width:100%;display:flex;flex-direction:column;gap:32px;}' +
         '.igc *{box-sizing:border-box;}' +
-        '.igc__radios{display:flex;gap:16px;align-items:center;flex-wrap:wrap;font-size:14px;line-height:1.4;}' +
+        '.igc__radios{display:flex;flex-direction:column;gap:10px;font-size:14px;line-height:1.4;}' +
+        '.igc__radios-row{display:flex;gap:16px;align-items:center;flex-wrap:wrap;}' +
         '.igc__radio{display:flex;gap:8px;align-items:center;color:' + COLORS.black + ';cursor:pointer;}' +
         '.igc__radio input{accent-color:' + COLORS.blue + ';}' +
         '.igc svg text{-webkit-user-select:none;user-select:none;}' +
@@ -476,6 +595,10 @@
 
       let radios = document.createElement('div');
       radios.className = 'igc__radios';
+      let unitsRow = document.createElement('div');
+      unitsRow.className = 'igc__radios-row';
+      let expenseVizRow = document.createElement('div');
+      expenseVizRow.className = 'igc__radios-row';
 
       let units = [
         {id: 'week', label: 'Weekly'},
@@ -504,7 +627,7 @@
 
         label.appendChild(input);
         label.appendChild(text);
-        radios.appendChild(label);
+        unitsRow.appendChild(label);
       });
 
       let expenseVizOptions = [
@@ -530,8 +653,11 @@
 
         label.appendChild(input);
         label.appendChild(text);
-        radios.appendChild(label);
+        expenseVizRow.appendChild(label);
       });
+
+      radios.appendChild(unitsRow);
+      radios.appendChild(expenseVizRow);
 
       let chartWrap = document.createElement('div');
       chartWrap.className = 'igc__chart-wrap';
@@ -615,7 +741,7 @@
         tMin: this.state.yearsMin,
         tMax: this.state.yearsMax,
         yMin: flowToWeekly(yMinDisplay, displayUnit),
-        yMax: flowToWeekly(Y_MAX_BY_UNIT[displayUnit] || Y_MAX_BY_UNIT.year, displayUnit),
+        yMax: this._projectionMaxWeekly(),
         ticksY: []
       };
     };
@@ -710,9 +836,18 @@
         if (!target || !target.dataset || !target.dataset.handle) {
           return;
         }
+        let displayUnitLock = isValidUnit(self.state.units) ? self.state.units : 'year';
 
         self.drag = {
-          handle: target.dataset.handle
+          handle: target.dataset.handle,
+          domain: {
+            yMinLockWeekly: self.chart.yMin,
+            yMaxLockWeekly: self.chart.yMax,
+            ticksYLockWeekly: self.chart.ticksY.slice(),
+            displayUnitLock: displayUnitLock,
+            yMaxLockDisplayTick: snapUpOneThree(flowFromWeekly(self.chart.yMax, displayUnitLock)),
+            canExpandYMax: true
+          }
         };
         self.nodes.svg.setPointerCapture(event.pointerId);
       });
@@ -726,8 +861,9 @@
           return;
         }
 
+        let hasDomainExpansion = self._maybeExpandDragYMax(coords);
         let hasStateUpdate = self._handleDragAt(coords);
-        if (!hasStateUpdate) {
+        if (!hasDomainExpansion && !hasStateUpdate) {
           return;
         }
         self.render(DRAG_RENDER_OPTIONS);
@@ -796,6 +932,102 @@
         default:
           return false;
       }
+    };
+
+    _applyDragDomainLock() {
+      let hasDragDomain = this.drag && this.drag.domain;
+      if (!hasDragDomain) {
+        return false;
+      }
+
+      let yMinLockWeekly = this._clampForProjection(this.drag.domain.yMinLockWeekly);
+      let yMaxLockWeekly = this._clampForProjection(this.drag.domain.yMaxLockWeekly);
+      let hasFiniteBounds = isFiniteNumber(yMinLockWeekly) && isFiniteNumber(yMaxLockWeekly);
+      if (!hasFiniteBounds) {
+        return false;
+      }
+
+      let yMinWeekly = Math.min(yMinLockWeekly, yMaxLockWeekly);
+      let yMaxWeekly = Math.max(yMinLockWeekly, yMaxLockWeekly);
+      if (yMaxWeekly <= yMinWeekly) {
+        return false;
+      }
+
+      this.drag.domain.yMinLockWeekly = yMinWeekly;
+      this.drag.domain.yMaxLockWeekly = yMaxWeekly;
+      let displayUnit = isValidUnit(this.drag.domain.displayUnitLock) ? this.drag.domain.displayUnitLock : this.state.units;
+      this.drag.domain.displayUnitLock = displayUnit;
+      this.drag.domain.yMaxLockDisplayTick = snapUpOneThree(flowFromWeekly(yMaxWeekly, displayUnit));
+      this.chart.yMin = yMinWeekly;
+      this.chart.yMax = yMaxWeekly;
+      let lockedTicks = Array.isArray(this.drag.domain.ticksYLockWeekly)
+        ? this.drag.domain.ticksYLockWeekly.slice()
+        : [];
+      let filteredLockedTicks = lockedTicks.filter(function (tick) {
+        return isFiniteNumber(tick) && tick > 0 && tick >= yMinWeekly && tick <= yMaxWeekly;
+      });
+      if (!filteredLockedTicks.length) {
+        let baselineDisplayTicks = Y_TICKS_BY_UNIT[displayUnit] || Y_TICKS_BY_UNIT.year || [];
+        let normalizedDomain = {
+          yMinDisplay: flowFromWeekly(yMinWeekly, displayUnit),
+          yMaxDisplay: flowFromWeekly(yMaxWeekly, displayUnit)
+        };
+        filteredLockedTicks = this._domainTicksWeekly(displayUnit, baselineDisplayTicks, normalizedDomain);
+      }
+      this.chart.ticksY = filteredLockedTicks;
+      this.drag.domain.ticksYLockWeekly = filteredLockedTicks.slice();
+      return true;
+    };
+
+    _maybeExpandDragYMax(coords) {
+      let hasDragDomain = this.drag && this.drag.domain;
+      let hasCoords = coords && isFiniteNumber(coords.y);
+      if (!hasDragDomain || !hasCoords) {
+        return false;
+      }
+      if (coords.y > this.chart.paddingTop + DRAG_Y_EXPAND_RESET_OFFSET) {
+        this.drag.domain.canExpandYMax = true;
+        return false;
+      }
+      if (coords.y > this.chart.paddingTop + DRAG_Y_EXPAND_TRIGGER_OFFSET) {
+        return false;
+      }
+      if (!this.drag.domain.canExpandYMax) {
+        return false;
+      }
+
+      let displayUnit = isValidUnit(this.drag.domain.displayUnitLock) ? this.drag.domain.displayUnitLock : this.state.units;
+      this.drag.domain.displayUnitLock = displayUnit;
+      let yMinLockWeekly = this._clampForProjection(this.drag.domain.yMinLockWeekly);
+      let yMaxLockWeekly = this._clampForProjection(this.drag.domain.yMaxLockWeekly);
+      let hasFiniteBounds = isFiniteNumber(yMinLockWeekly) && isFiniteNumber(yMaxLockWeekly);
+      if (!hasFiniteBounds || yMaxLockWeekly <= yMinLockWeekly) {
+        return false;
+      }
+
+      let yMaxDisplayTick = isFiniteNumber(this.drag.domain.yMaxLockDisplayTick) && this.drag.domain.yMaxLockDisplayTick > 0
+        ? this.drag.domain.yMaxLockDisplayTick
+        : snapUpOneThree(flowFromWeekly(yMaxLockWeekly, displayUnit));
+      let nextYMaxDisplay = nextOneThreeTick(yMaxDisplayTick);
+      let nextYMaxWeekly = this._clampForProjection(flowToWeekly(nextYMaxDisplay, displayUnit));
+      if (!isFiniteNumber(nextYMaxWeekly) || nextYMaxWeekly <= yMaxLockWeekly) {
+        return false;
+      }
+
+      this.drag.domain.yMinLockWeekly = yMinLockWeekly;
+      this.drag.domain.yMaxLockWeekly = nextYMaxWeekly;
+      this.drag.domain.yMaxLockDisplayTick = nextYMaxDisplay;
+      this.drag.domain.canExpandYMax = false;
+      this.chart.yMin = this.drag.domain.yMinLockWeekly;
+      this.chart.yMax = this.drag.domain.yMaxLockWeekly;
+      let baselineDisplayTicks = Y_TICKS_BY_UNIT[displayUnit] || Y_TICKS_BY_UNIT.year || [];
+      let normalizedDomain = {
+        yMinDisplay: flowFromWeekly(this.drag.domain.yMinLockWeekly, displayUnit),
+        yMaxDisplay: flowFromWeekly(this.drag.domain.yMaxLockWeekly, displayUnit)
+      };
+      this.drag.domain.ticksYLockWeekly = this._domainTicksWeekly(displayUnit, baselineDisplayTicks, normalizedDomain);
+      this._applyDragDomainLock();
+      return true;
     };
 
     /**
@@ -936,12 +1168,29 @@
     };
 
     _yMaxWeeklyForUnit(units) {
-      let displayUnit = isValidUnit(units) ? units : 'year';
-      let yMaxDisplay = Y_MAX_BY_UNIT[displayUnit] || Y_MAX_BY_UNIT.year;
-      let yMaxWeekly = flowToWeekly(yMaxDisplay, displayUnit);
-      let fallbackYMax = flowToWeekly(Y_MAX_BY_UNIT.year, 'year');
-      let resolvedYMax = isFiniteNumber(yMaxWeekly) && yMaxWeekly > 0 ? yMaxWeekly : fallbackYMax;
-      return clamp(resolvedYMax, MIN_WEEKLY_LOG_FLOOR, MAX_FINITE_FLOW);
+      let projectionMax = this._projectionMaxWeekly();
+      return clamp(projectionMax, MIN_WEEKLY_LOG_FLOOR, MAX_FINITE_FLOW);
+    };
+
+    _visibleYMaxWeekly() {
+      let tEndRaw = this.chart.tMax - this.chart.tMin;
+      let tEnd = isFiniteNumber(tEndRaw) && tEndRaw > 0 ? tEndRaw : 0;
+      let maxCandidate = isFiniteNumber(this.state.weeklyFixedExpenses) && this.state.weeklyFixedExpenses > 0
+        ? this.state.weeklyFixedExpenses
+        : 0;
+      let sampleSegments = this._totalLineSegments();
+      for (let i = 0; i <= sampleSegments; i += 1) {
+        let t = (i / sampleSegments) * tEnd;
+        let samples = [this._revenueAt(t), this._variableAt(t), this._totalAt(t)];
+        maxCandidate = samples.reduce(function (maxValue, value) {
+          if (!isFiniteNumber(value) || value <= 0) {
+            return maxValue;
+          }
+          return Math.max(maxValue, value);
+        }, maxCandidate);
+      }
+      let safeCandidate = maxCandidate > 0 ? maxCandidate : MIN_WEEKLY_LOG_FLOOR;
+      return this._clampForProjection(safeCandidate);
     };
 
     _tEndWeeks() {
@@ -1066,12 +1315,8 @@
       }
     };
 
-    _setFixedTicks(displayUnit, baselineDisplayTicks, normalizedDomain) {
-      let ticksDisplay = baselineDisplayTicks.length ? baselineDisplayTicks.slice() : createOneThreeTicks(
-        normalizedDomain.yMinDisplay,
-        normalizedDomain.yMaxDisplay,
-        this._targetYTickCount()
-      );
+    _domainTicksWeekly(displayUnit, baselineDisplayTicks, normalizedDomain) {
+      let ticksDisplay = extendBaselineOneThreeTicks(baselineDisplayTicks, normalizedDomain.yMaxDisplay);
       let ticksWeekly = ticksDisplay
         .filter(function (tick) {
           return isFiniteNumber(tick) && tick >= normalizedDomain.yMinDisplay * 0.99 && tick <= normalizedDomain.yMaxDisplay * 1.01;
@@ -1080,7 +1325,7 @@
           return flowToWeekly(tick, displayUnit);
         });
 
-      this.chart.ticksY = this._filterYTicksByGap(
+      let filteredTicks = this._filterYTicksByGap(
         ticksWeekly,
         MIN_Y_TICK_GAP,
         [
@@ -1089,14 +1334,18 @@
         ]
       );
 
-      if (this.chart.ticksY.length) {
-        return;
+      if (filteredTicks.length) {
+        return filteredTicks;
       }
 
       let safeMinDisplay = isFiniteNumber(normalizedDomain.yMinDisplay) && normalizedDomain.yMinDisplay > 0 ? normalizedDomain.yMinDisplay : 1;
       let safeMaxDisplay = isFiniteNumber(normalizedDomain.yMaxDisplay) && normalizedDomain.yMaxDisplay > safeMinDisplay ? normalizedDomain.yMaxDisplay : safeMinDisplay * 10;
       let midDisplay = Math.sqrt(safeMinDisplay * safeMaxDisplay);
-      this.chart.ticksY = [flowToWeekly(clamp(midDisplay, safeMinDisplay, safeMaxDisplay), displayUnit)];
+      return [flowToWeekly(clamp(midDisplay, safeMinDisplay, safeMaxDisplay), displayUnit)];
+    };
+
+    _setDomainTicks(displayUnit, baselineDisplayTicks, normalizedDomain) {
+      this.chart.ticksY = this._domainTicksWeekly(displayUnit, baselineDisplayTicks, normalizedDomain);
     };
 
     /**
@@ -1213,15 +1462,22 @@
     };
 
     /**
-     * Updates fixed log-scale Y domain and baseline ticks for the active unit.
+     * Updates log-scale Y domain and ticks for the active unit.
      */
     _updateYDomain() {
+      if (this._applyDragDomainLock()) {
+        return;
+      }
+
       let displayUnit = this.state.units;
       let baselineDisplayTicks = Y_TICKS_BY_UNIT[displayUnit] || Y_TICKS_BY_UNIT.year || [];
       let yMinDisplay = MIN_DISPLAY_Y_FLOOR_BY_UNIT[displayUnit] || 1;
-      let yMaxDisplay = Y_MAX_BY_UNIT[displayUnit] || Y_MAX_BY_UNIT.year;
+      let yMaxDisplayRaw = flowFromWeekly(this._visibleYMaxWeekly(), displayUnit);
+      let yMaxDisplayHeadroom = isFiniteNumber(yMaxDisplayRaw) && yMaxDisplayRaw > 0 ? yMaxDisplayRaw * 1.15 : yMinDisplay * 1.2;
+      let yMaxDisplaySnapped = snapUpOneThree(yMaxDisplayHeadroom);
+      let yMaxDisplay = Math.max(yMinDisplay * 1.2, yMaxDisplaySnapped);
       let normalizedDomain = this._applyChartDomain(displayUnit, yMinDisplay, yMaxDisplay);
-      this._setFixedTicks(displayUnit, baselineDisplayTicks, normalizedDomain);
+      this._setDomainTicks(displayUnit, baselineDisplayTicks, normalizedDomain);
     };
 
     /**
@@ -1453,19 +1709,39 @@
     /**
      * Generates a sampled polyline path for value-over-time functions.
      */
-    _linePath(fn, segments) {
+    _linePath(fn, segments, anchorTimes) {
       let points = [];
       let sampleSegments = clamp(
         Math.round(isFiniteNumber(segments) ? segments : this._totalLineSegments()),
         2,
         MAX_TOTAL_LINE_SEGMENTS
       );
-      let tSpan = this.chart.tMax - this.chart.tMin;
-
+      let tSpanRaw = this.chart.tMax - this.chart.tMin;
+      let tSpan = isFiniteNumber(tSpanRaw) && tSpanRaw > 0 ? tSpanRaw : 0;
+      let sampledTimes = [];
       for (let i = 0; i <= sampleSegments; i += 1) {
-        let t = (i / sampleSegments) * tSpan;
-        points.push(this._xFromTime(t) + ',' + this._yFromValue(fn.call(this, t)));
+        sampledTimes.push((i / sampleSegments) * tSpan);
       }
+
+      let extraAnchors = Array.isArray(anchorTimes) ? anchorTimes : [];
+      extraAnchors.forEach(function (anchorTime) {
+        if (!isFiniteNumber(anchorTime)) {
+          return;
+        }
+        sampledTimes.push(clamp(anchorTime, 0, tSpan));
+      });
+
+      let uniqueTimes = sampledTimes
+        .sort(function (a, b) {
+          return a - b;
+        })
+        .filter(function (value, idx, arr) {
+          return idx === 0 || Math.abs(value - arr[idx - 1]) > 1e-9;
+        });
+
+      uniqueTimes.forEach(function (t) {
+        points.push(this._xFromTime(t) + ',' + this._yFromValue(fn.call(this, t)));
+      }, this);
 
       return points.join(' ');
     };
@@ -1937,19 +2213,28 @@
 
       let tEnd = this.chart.tMax - this.chart.tMin;
       let isBarsMode = this.state.expenseViz === 'bars';
+      let lineSegments = this._totalLineSegments();
+      let lineAnchorTimes = [];
+      let hasBreakevenInRange = drawMetrics &&
+        isFiniteNumber(drawMetrics.breakevenYears) &&
+        drawMetrics.breakevenYears >= 0 &&
+        drawMetrics.breakevenYears <= tEnd;
+      if (hasBreakevenInRange) {
+        lineAnchorTimes.push(drawMetrics.breakevenYears);
+      }
       if (isBarsMode) {
         this._drawExpenseBars(gLines, gLabels, plotBottomY, yearSpacing);
       }
 
       addLine({
-        points: this._lineSegmentPath(this._revenueAt),
+        points: this._linePath(this._revenueAt, lineSegments, lineAnchorTimes),
         stroke: COLORS.revenue,
         width: 3,
         title: 'Revenue',
         strokeOpacity: 1
       });
       addLine({
-        points: this._lineSegmentPath(this._variableAt),
+        points: this._linePath(this._variableAt, lineSegments, lineAnchorTimes),
         stroke: COLORS.variableLight,
         width: 2.5,
         title: 'Variable expenses',
@@ -1969,7 +2254,7 @@
         showVisible: true
       });
       addLine({
-        points: this._lineSegmentPath(this._totalAt),
+        points: this._linePath(this._totalAt, lineSegments, lineAnchorTimes),
         stroke: COLORS.total,
         width: 3.5,
         title: 'Total expenses',
@@ -1992,9 +2277,9 @@
       let rightLabelLeaderStartX = plotRightX - 1;
       this._renderRightLineLabels(gLabels, positionedRightLabels, rightLabelLeaderStartX);
 
-      if (drawMetrics && isFiniteNumber(drawMetrics.breakevenYears) && drawMetrics.breakevenYears <= tEnd) {
+      if (hasBreakevenInRange) {
         let bx = this._xFromTime(drawMetrics.breakevenYears);
-        let by = this._yFromValue(this._revenueAt(drawMetrics.breakevenYears));
+        let by = this._yFromValue(this._totalAt(drawMetrics.breakevenYears));
 
         let marker = createSvgEl('circle');
         setAttrs(marker, {
