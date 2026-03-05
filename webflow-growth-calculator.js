@@ -1774,6 +1774,7 @@
     };
 
     _rightLineLabelCandidates(tEnd) {
+      let isBarsMode = this.state.expenseViz === 'bars';
       let revenueEndWeekly = this._revenueAt(tEnd);
       let variableEndWeekly = this._variableAt(tEnd);
       let fixedEndWeekly = this.state.weeklyFixedExpenses;
@@ -1820,7 +1821,8 @@
 
       return candidates
         .filter(function (candidate) {
-          return isFiniteNumber(candidate.endWeekly) && candidate.endWeekly >= 0 && isFiniteNumber(candidate.targetY);
+          let isSeriesVisible = !isBarsMode || candidate.key !== 'fixed';
+          return isSeriesVisible && isFiniteNumber(candidate.endWeekly) && candidate.endWeekly >= 0 && isFiniteNumber(candidate.targetY);
         })
         .map(function (candidate) {
           return {
@@ -2242,17 +2244,19 @@
         strokeOpacity: EXPENSE_SERIES_OPACITY,
         showVisible: !isBarsMode
       });
-      addLine({
-        points: this._lineSegmentPath(function () {
-          return this.state.weeklyFixedExpenses;
-        }),
-        stroke: COLORS.fixed,
-        width: 2.5,
-        title: 'Fixed expenses',
-        dasharray: EXPENSE_SERIES_DASHARRAY,
-        strokeOpacity: EXPENSE_SERIES_OPACITY,
-        showVisible: true
-      });
+      if (!isBarsMode) {
+        addLine({
+          points: this._lineSegmentPath(function () {
+            return this.state.weeklyFixedExpenses;
+          }),
+          stroke: COLORS.fixed,
+          width: 2.5,
+          title: 'Fixed expenses',
+          dasharray: EXPENSE_SERIES_DASHARRAY,
+          strokeOpacity: EXPENSE_SERIES_OPACITY,
+          showVisible: true
+        });
+      }
       addLine({
         points: this._linePath(this._totalAt, lineSegments, lineAnchorTimes),
         stroke: COLORS.total,
