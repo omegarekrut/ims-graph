@@ -683,7 +683,7 @@
       let inputs = document.createElement('div');
       inputs.className = 'igc__inputs';
       inputs.innerHTML = '' +
-        '<div class="igc__field"><label class="igc__field-label">Revenue</label><input class="igc__input" data-key="revenue" type="text" /></div>' +
+        '<div class="igc__field"><label class="igc__field-label">Starting Revenue</label><input class="igc__input" data-key="revenue" type="text" /></div>' +
         '<div class="igc__field"><label class="igc__field-label">Gross margin</label><input class="igc__input" data-key="grossMargin" type="text" /></div>' +
         '<div class="igc__field"><label class="igc__field-label">Fixed expenses</label><input class="igc__input" data-key="fixed" type="text" /></div>' +
         '<div class="igc__field"><label class="igc__field-label">Growth rate</label><input class="igc__input" data-key="growth" type="text" /></div>';
@@ -2062,6 +2062,10 @@
       let plotRightX = this.chart.width - this.chart.paddingRight;
       let plotTopY = this.chart.paddingTop;
       let plotBottomY = this.chart.height - this.chart.paddingBottom;
+      let gHover = createSvgEl('g');
+      setAttrs(gHover, {
+        'pointer-events': 'none'
+      });
 
       this.chart.ticksY.forEach(function (tick) {
         let y = self._yFromValue(tick);
@@ -2173,7 +2177,8 @@
         let points = config.points;
         let stroke = config.stroke;
         let width = config.width;
-        let titleText = config.title;
+        let hasHoverValue = typeof config.hoverValueAt === 'function';
+        let titleText = hasHoverValue ? '' : config.title;
         let shouldDrawVisible = config.showVisible !== false;
         if (shouldDrawVisible) {
           let visible = createSvgEl('polyline');
@@ -2210,6 +2215,82 @@
           hit.appendChild(title);
         }
 
+        if (hasHoverValue) {
+          function clearHover() {
+            gHover.innerHTML = '';
+          }
+
+          hit.addEventListener('pointerleave', clearHover);
+          hit.addEventListener('pointercancel', clearHover);
+
+          hit.addEventListener('pointermove', function (event) {
+            let coords = self._eventToChart(event);
+            if (!coords) {
+              return;
+            }
+
+            let tEnd = self.chart.tMax - self.chart.tMin;
+            let tRaw = self._xToTime(coords.x);
+            let t = isFiniteNumber(tRaw) ? clamp(tRaw, 0, tEnd) : 0;
+            let weeklyValue = config.hoverValueAt.call(self, t);
+            if (!isFiniteNumber(weeklyValue) || weeklyValue < 0) {
+              clearHover();
+              return;
+            }
+
+            let displayValue = flowFromWeekly(weeklyValue, self.state.units);
+            if (!isFiniteNumber(displayValue) || displayValue < 0) {
+              clearHover();
+              return;
+            }
+
+            let x = self._xFromTime(t);
+            let y = self._yFromValue(weeklyValue);
+            let textValue = formatMoney(displayValue);
+            let textLabel = (config.hoverPrefix || '') + textValue;
+            if (!textLabel) {
+              clearHover();
+              return;
+            }
+
+            let tooltipX = x + 10;
+            let anchor = 'start';
+            if (tooltipX > plotRightX - 8) {
+              tooltipX = x - 10;
+              anchor = 'end';
+            }
+            let tooltipY = clamp(y - 10, plotTopY + 14, plotBottomY - 6);
+
+            gHover.innerHTML = '';
+            let dot = createSvgEl('circle');
+            setAttrs(dot, {
+              cx: x,
+              cy: y,
+              r: 3.5,
+              fill: COLORS.white,
+              stroke: config.hoverColor || COLORS.black,
+              'stroke-width': 2
+            });
+            gHover.appendChild(dot);
+
+            let text = createSvgEl('text');
+            text.textContent = textLabel;
+            setAttrs(text, {
+              x: tooltipX,
+              y: tooltipY,
+              fill: config.hoverColor || COLORS.black,
+              'font-size': 10,
+              'font-weight': 700,
+              'text-anchor': anchor,
+              'paint-order': 'stroke',
+              stroke: COLORS.white,
+              'stroke-width': 3,
+              'stroke-linejoin': 'round'
+            });
+            gHover.appendChild(text);
+          });
+        }
+
         gLines.appendChild(hit);
       }
 
@@ -2233,6 +2314,9 @@
         stroke: COLORS.revenue,
         width: 3,
         title: 'Revenue',
+        hoverPrefix: 'Revenue ',
+        hoverColor: COLORS.revenue,
+        hoverValueAt: this._revenueAt,
         strokeOpacity: 1
       });
       addLine({
@@ -2429,10 +2513,9 @@
       this._renderActiveHandleLabel(gHandles, 'growth', handlePoints, handleLabelBounds);
 
       let isExpenseHandleActive = activeHandle === 'fixed' || activeHandle === 'variable';
-      if (!isExpenseHandleActive) {
-        return;
-      }
-      this._renderActiveHandleLabel(gHandles, activeHandle, handlePoints, handleLabelBounds);
+      isExpenseHandleActive && this._renderActiveHandleLabel(gHandles, activeHandle, handlePoints, handleLabelBounds);
+
+      gHandles.appendChild(gHover);
     };
 
     /**
