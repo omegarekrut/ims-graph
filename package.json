@@ -1,0 +1,25 @@
+{
+  "name": "ims-graph",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "bun run build:widget && bun run build:site && bun run build:codepen",
+    "build:widget": "vite build --mode widget",
+    "build:site": "vite build --mode site",
+    "build:codepen": "vite build --mode codepen",
+    "typecheck": "tsc --noEmit",
+    "test:unit": "vitest run",
+    "test:e2e": "bunx playwright test --config=playwright.config.ts",
+    "test": "bun run test:unit && bun run test:e2e"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.54.2",
+    "@types/node": "^24.3.0",
+    "jsdom": "^26.1.0",
+    "typescript": "^5.9.2",
+    "vite": "^7.1.3",
+    "vitest": "^3.2.4"
+  }
+}

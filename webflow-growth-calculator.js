@@ -2578,12 +2578,18 @@
     autoInit: autoInit
   };
 
+  let shouldAutoInit = !(window.__IMS_GRAPH_DISABLE_LEGACY_AUTO_INIT === true);
+  if (!shouldAutoInit) {
+    return;
+  }
+
   // Auto-start after DOM is ready.
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', function () {
       autoInit();
     });
-  } else {
-    autoInit();
+    return;
   }
+
+  autoInit();
 })();
