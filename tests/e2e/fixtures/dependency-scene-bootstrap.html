@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dependency Scene</title>
+  </head>
+  <body>
+    <section id="scene-dependency">
+      <div data-ims-graph="source-graph"></div>
+      <div data-ims-graph="target-graph"></div>
+    </section>
+    <script type="module">
+      import { installBrowserRuntime } from '/src/entries/bootstrap-browser.ts';
+      installBrowserRuntime({ autoInit: false, force: true });
+    </script>
+  </body>
+</html>
