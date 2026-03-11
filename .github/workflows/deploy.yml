@@ -13,6 +13,9 @@ concurrency:
   group: pages
   cancel-in-progress: true
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 permissions:
   contents: read
 
@@ -21,7 +24,7 @@ jobs:
     name: Test Before Deploy
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: oven-sh/setup-bun@v2
       - name: Install Dependencies
         run: bun install --frozen-lockfile
@@ -45,7 +48,7 @@ jobs:
       IMS_PAGES_BASE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
       IMS_BUILD_ID: ${{ github.sha }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: oven-sh/setup-bun@v2
       - name: Install Dependencies
         run: bun install --frozen-lockfile
