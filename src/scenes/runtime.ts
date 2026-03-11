@@ -19,6 +19,7 @@ import {
   uniqueElements,
 } from '../shared/dom';
 import { createGraphId, createSceneId, toGraphId, toSceneId } from '../shared/ids';
+import { resetPageLeadGateController } from '../widgets/lead/lead-gate';
 import {
   mountGraphWithAdapter,
   normalizeGraphOptionsForKind,
@@ -413,4 +414,5 @@ export function autoInitScenes(
 
 export function resetRuntimeRegistry(): void {
   resetSceneRuntimeState(resetGraphAdapters);
+  resetPageLeadGateController();
 }

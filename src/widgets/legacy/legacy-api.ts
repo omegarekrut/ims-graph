@@ -1,7 +1,7 @@
-import '../shared/runtime-flags';
-import '../../webflow-growth-calculator.js';
+import '../../shared/runtime-flags';
+import '../../../webflow-growth-calculator.js';
 
-import type { LegacyGrowthCalculatorApi } from '../core/contracts';
+import type { LegacyGrowthCalculatorApi } from '../../core/contracts';
 
 const LEGACY_API: LegacyGrowthCalculatorApi | null =
   typeof window === 'undefined'

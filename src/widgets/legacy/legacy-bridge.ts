@@ -1,5 +1,5 @@
-import type { GraphMountTarget, GrowthCalculatorOptions } from '../core/contracts';
-import { normalizeGrowthOptions } from '../core/options';
+import type { GraphMountTarget, GrowthCalculatorOptions } from '../../core/contracts';
+import { normalizeGrowthOptions } from '../../core/options';
 
 export function normalizeLegacyTarget(
   target: GraphMountTarget | null | undefined

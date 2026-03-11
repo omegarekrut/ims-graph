@@ -6,8 +6,8 @@ import type {
   LegacyGrowthCalculatorApi,
 } from '../core/contracts';
 import { autoInitGraphs, initGraph } from '../scenes/runtime';
-import { getLegacyApi } from '../widgets/legacy-api';
-import { normalizeLegacyOptions, normalizeLegacyTarget } from '../widgets/legacy-bridge';
+import { getLegacyApi } from '../widgets/legacy/legacy-api';
+import { normalizeLegacyOptions, normalizeLegacyTarget } from '../widgets/legacy/legacy-bridge';
 import { autoInitScene, initScene, setRuntimeLegacyApi } from './embed';
 
 interface SingleGraphBootstrapOptions {

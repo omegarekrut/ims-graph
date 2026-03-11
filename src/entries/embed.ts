@@ -13,7 +13,7 @@ import {
   initGraph,
   initScene as initRuntimeScene,
 } from '../scenes/runtime';
-import { normalizeLegacyOptions, normalizeLegacyTarget } from '../widgets/legacy-bridge';
+import { normalizeLegacyOptions, normalizeLegacyTarget } from '../widgets/legacy/legacy-bridge';
 
 let runtimeLegacyApi: LegacyGrowthCalculatorApi | null = null;
 
