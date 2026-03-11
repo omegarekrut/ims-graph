@@ -1,7 +1,13 @@
 import { readFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { chromium, type Browser, type BrowserContext, type Locator, type Page } from '@playwright/test';
+import {
+  type Browser,
+  type BrowserContext,
+  chromium,
+  type Locator,
+  type Page,
+} from '@playwright/test';
 
 interface CodepenShellAssets {
   html: string;
@@ -102,18 +108,16 @@ function toStorageCookie(value: unknown): StorageCookie | null {
     return null;
   }
 
-  const domain = typeof cookie.domain === 'string' && cookie.domain !== ''
-    ? cookie.domain
-    : DEFAULT_COOKIE_DOMAIN;
-  const path = typeof cookie.path === 'string' && cookie.path !== ''
-    ? cookie.path
-    : '/';
+  const domain =
+    typeof cookie.domain === 'string' && cookie.domain !== ''
+      ? cookie.domain
+      : DEFAULT_COOKIE_DOMAIN;
+  const path = typeof cookie.path === 'string' && cookie.path !== '' ? cookie.path : '/';
   const expires = typeof cookie.expires === 'number' ? cookie.expires : -1;
   const httpOnly = typeof cookie.httpOnly === 'boolean' ? cookie.httpOnly : false;
   const secure = typeof cookie.secure === 'boolean' ? cookie.secure : true;
-  const sameSite = cookie.sameSite === 'None' || cookie.sameSite === 'Strict'
-    ? cookie.sameSite
-    : 'Lax';
+  const sameSite =
+    cookie.sameSite === 'None' || cookie.sameSite === 'Strict' ? cookie.sameSite : 'Lax';
 
   return {
     name,
@@ -123,13 +127,11 @@ function toStorageCookie(value: unknown): StorageCookie | null {
     expires,
     httpOnly,
     secure,
-    sameSite
+    sameSite,
   };
 }
 
-function toStorageOrigin(
-  value: unknown
-): StorageStateLike['origins'][number] | null {
+function toStorageOrigin(value: unknown): StorageStateLike['origins'][number] | null {
   if (!value || typeof value !== 'object') {
     return null;
   }
@@ -152,7 +154,7 @@ function toStorageOrigin(
 
   return {
     origin,
-    localStorage
+    localStorage,
   };
 }
 
@@ -172,7 +174,7 @@ function toStorageEntry(value: unknown): { name: string; value: string } | null 
   }
   return {
     name,
-    value: entryValue
+    value: entryValue,
   };
 }
 
@@ -190,14 +192,16 @@ function buildCookie(
     expires: -1,
     httpOnly,
     secure: true,
-    sameSite: 'Lax'
+    sameSite: 'Lax',
   };
 }
 
 function resolveStorageState(): StorageStateLike {
   const storageStateJson = normalizeEnv(process.env.CODEPEN_STORAGE_STATE_JSON);
   if (storageStateJson) {
-    return toStorageStateLike(safeJsonParse<unknown>(storageStateJson, 'CODEPEN_STORAGE_STATE_JSON'));
+    return toStorageStateLike(
+      safeJsonParse<unknown>(storageStateJson, 'CODEPEN_STORAGE_STATE_JSON')
+    );
   }
 
   const cookiesJson = normalizeEnv(process.env.CODEPEN_COOKIES_JSON);
@@ -211,7 +215,7 @@ function resolveStorageState(): StorageStateLike {
       .filter((cookie): cookie is StorageCookie => cookie !== null);
     return {
       cookies,
-      origins: []
+      origins: [],
     };
   }
 
@@ -232,7 +236,7 @@ function resolveStorageState(): StorageStateLike {
 
   return {
     cookies,
-    origins: []
+    origins: [],
   };
 }
 
@@ -305,7 +309,7 @@ async function readCodepenAssets(distPrefix: string): Promise<CodepenShellAssets
     readFile(htmlPath, 'utf8'),
     readFile(cssPath, 'utf8'),
     readFile(jsPath, 'utf8'),
-    readFile(prefillPath, 'utf8')
+    readFile(prefillPath, 'utf8'),
   ]);
   const prefillName = resolvePrefillFileName(distPrefix);
   const expectedJsExternal = toExpectedJsExternalList(prefillRaw, prefillName);
@@ -336,7 +340,7 @@ function editorTabCandidates(page: Page, label: string): Locator[] {
     page.getByRole('tab', { name: titlePattern }),
     page.getByRole('button', { name: titlePattern }),
     page.locator('[data-testid*="tab"]', { hasText: titlePattern }),
-    page.locator('button, a', { hasText: titlePattern })
+    page.locator('button, a', { hasText: titlePattern }),
   ];
 }
 
@@ -344,7 +348,7 @@ function activeEditorCandidates(page: Page): Locator[] {
   return [
     page.locator('[role="tabpanel"]:not([hidden]) .CodeMirror'),
     page.locator('.CodeMirror-focused'),
-    page.locator('.CodeMirror:visible')
+    page.locator('.CodeMirror:visible'),
   ];
 }
 
@@ -366,14 +370,18 @@ async function replaceFocusedEditorContent(page: Page, content: string): Promise
   await page.keyboard.insertText(content);
 }
 
-async function setPanelContent(page: Page, label: 'HTML' | 'CSS' | 'JS', content: string): Promise<void> {
+async function setPanelContent(
+  page: Page,
+  label: 'HTML' | 'CSS' | 'JS',
+  content: string
+): Promise<void> {
   await focusEditor(page, label);
   await replaceFocusedEditorContent(page, content);
 }
 
 async function waitForEditorReady(page: Page): Promise<void> {
   await page.waitForSelector('.CodeMirror, [role="tab"], [role="tabpanel"]', {
-    timeout: MAX_BOOT_WAIT_MS
+    timeout: MAX_BOOT_WAIT_MS,
   });
 
   const isLoginPage = page.url().includes('/login');
@@ -408,14 +416,17 @@ async function assertJsExternalMatches(page: Page, expectedJsExternal: string[])
 async function triggerSave(page: Page): Promise<void> {
   const modifier = process.platform === 'darwin' ? 'Meta' : 'Control';
   const responsePromise = page
-    .waitForResponse((response) => {
-      const request = response.request();
-      if (request.method() !== 'POST') {
-        return false;
-      }
-      const url = response.url();
-      return /\/save(\/|$|\?)/.test(url) || /\/pen\/[^/]+\/save/.test(url);
-    }, { timeout: SAVE_WAIT_MS })
+    .waitForResponse(
+      (response) => {
+        const request = response.request();
+        if (request.method() !== 'POST') {
+          return false;
+        }
+        const url = response.url();
+        return /\/save(\/|$|\?)/.test(url) || /\/pen\/[^/]+\/save/.test(url);
+      },
+      { timeout: SAVE_WAIT_MS }
+    )
     .then(() => true)
     .catch(() => false);
 
@@ -429,7 +440,7 @@ async function triggerSave(page: Page): Promise<void> {
   const saveButtonClicked = await clickFirstVisible([
     page.getByRole('button', { name: /^save$/i }),
     page.getByRole('button', { name: /save/i }),
-    page.locator('button', { hasText: /^Save$/i })
+    page.locator('button', { hasText: /^Save$/i }),
   ]);
 
   if (!saveButtonClicked) {
@@ -444,7 +455,11 @@ async function triggerSave(page: Page): Promise<void> {
   throw new Error('Could not confirm CodePen save operation.');
 }
 
-async function openEditorContext(): Promise<{ browser: Browser; context: BrowserContext; page: Page }> {
+async function openEditorContext(): Promise<{
+  browser: Browser;
+  context: BrowserContext;
+  page: Page;
+}> {
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({ storageState: resolveStorageState() });
   const page = await context.newPage();

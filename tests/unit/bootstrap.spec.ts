@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-
+import type { LegacyGrowthCalculatorApi } from '../../src/core/contracts';
 import {
   autoInitEmbed,
   autoInitScene,
@@ -11,9 +11,8 @@ import {
   initSceneEmbed,
   loadLegacyRuntime,
   publicApi,
-  setRuntimeLegacyApi
+  setRuntimeLegacyApi,
 } from '../../src/entries/embed';
-import type { LegacyGrowthCalculatorApi } from '../../src/core/contracts';
 
 describe('phase 2/3 runtime contracts', () => {
   it('preview/codepen shells keep mounts and module entrypoints', () => {
@@ -50,7 +49,7 @@ describe('phase 2/3 runtime contracts', () => {
   it('runtime legacy adapter can be injected', () => {
     const fakeLegacyApi: LegacyGrowthCalculatorApi = {
       init: () => ({ ok: true }),
-      autoInit: () => []
+      autoInit: () => [],
     };
 
     setRuntimeLegacyApi(fakeLegacyApi);
@@ -69,7 +68,7 @@ describe('phase 2/3 runtime contracts', () => {
     const initSpy = vi.fn(() => ({ ok: true }));
     const fakeLegacyApi: LegacyGrowthCalculatorApi = {
       init: initSpy,
-      autoInit: () => []
+      autoInit: () => [],
     };
 
     setRuntimeLegacyApi(fakeLegacyApi);
@@ -83,7 +82,7 @@ describe('phase 2/3 runtime contracts', () => {
       weeklyRevenue0: 250,
       yearsMax: 7,
       expenseViz: 'bars',
-      grossMargin: Number.NaN as unknown as number
+      grossMargin: Number.NaN as unknown as number,
     });
 
     expect(result).toEqual({ ok: true });
@@ -92,7 +91,7 @@ describe('phase 2/3 runtime contracts', () => {
       units: 'week',
       weeklyRevenue0: 250,
       yearsMax: 7,
-      expenseViz: 'bars'
+      expenseViz: 'bars',
     });
 
     const undefinedTargetResult = initEmbed(undefined as unknown as Element, {});

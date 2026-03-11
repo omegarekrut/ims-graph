@@ -1,21 +1,19 @@
 import type {
+  GraphInstance,
   GraphMountTarget,
+  GrowthCalculatorOptions,
   ImsGrowthCalculatorPublicApi,
   LegacyGrowthCalculatorApi,
   SceneDefinition,
-  SceneInstance
+  SceneInstance,
 } from '../core/contracts';
-import type { GraphInstance, GrowthCalculatorOptions } from '../core/contracts';
 import {
   autoInitGraphs,
   autoInitScenes,
   initGraph,
-  initScene as initRuntimeScene
+  initScene as initRuntimeScene,
 } from '../scenes/runtime';
-import {
-  normalizeLegacyOptions,
-  normalizeLegacyTarget
-} from '../widgets/legacy-bridge';
+import { normalizeLegacyOptions, normalizeLegacyTarget } from '../widgets/legacy-bridge';
 
 let runtimeLegacyApi: LegacyGrowthCalculatorApi | null = null;
 
@@ -27,12 +25,13 @@ function graphToLegacyInstance(graph: GraphInstance | null): unknown | null {
 }
 
 function graphsToLegacyInstances(graphs: GraphInstance[]): unknown[] {
-  return graphs
-    .map((graph) => graph.legacyInstance)
-    .filter((instance) => instance !== null);
+  return graphs.map((graph) => graph.legacyInstance).filter((instance) => instance !== null);
 }
 
-function collectUniqueGraphInstances(scenes: SceneInstance[], graphs: GraphInstance[]): GraphInstance[] {
+function collectUniqueGraphInstances(
+  scenes: SceneInstance[],
+  graphs: GraphInstance[]
+): GraphInstance[] {
   const sceneGraphs = scenes.flatMap((scene) => scene.graphs);
   const byMount = new Map<Element, GraphInstance>();
 
@@ -51,7 +50,10 @@ export function loadLegacyRuntime(): LegacyGrowthCalculatorApi | null {
   return runtimeLegacyApi;
 }
 
-export function initEmbed(target: GraphMountTarget, options: GrowthCalculatorOptions = {}): unknown | null {
+export function initEmbed(
+  target: GraphMountTarget,
+  options: GrowthCalculatorOptions = {}
+): unknown | null {
   const normalizedTarget = normalizeLegacyTarget(target);
   if (!normalizedTarget) {
     return null;
@@ -88,5 +90,5 @@ export const publicApi: ImsGrowthCalculatorPublicApi = {
   init: initEmbed,
   autoInit: autoInitEmbed,
   initScene: initScene,
-  autoInitScene: autoInitScene
+  autoInitScene: autoInitScene,
 };

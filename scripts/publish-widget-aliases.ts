@@ -13,26 +13,23 @@ const DIST_DIR = resolve(ROOT_DIR, 'dist');
 const ALIASES: AliasDefinition[] = [
   {
     from: 'ims-growth-calculator.iife.js',
-    to: 'webflow-growth-calculator.js'
+    to: 'webflow-growth-calculator.js',
   },
   {
     from: 'ims-growth-calculator.iife.js',
-    to: 'widget.latest.js'
+    to: 'widget.latest.js',
   },
   {
     from: 'scene-runtime.iife.js',
-    to: 'scene.latest.js'
-  }
+    to: 'scene.latest.js',
+  },
 ];
 
 async function main(): Promise<void> {
   await rm(resolve(DIST_DIR, 'widget'), { recursive: true, force: true });
 
   for (const alias of ALIASES) {
-    await copyFile(
-      resolve(DIST_DIR, alias.from),
-      resolve(DIST_DIR, alias.to)
-    );
+    await copyFile(resolve(DIST_DIR, alias.from), resolve(DIST_DIR, alias.to));
   }
 }
 

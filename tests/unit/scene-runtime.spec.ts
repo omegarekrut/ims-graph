@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-
+import type { GraphAdapter, GraphAdapterMountArgs } from '../../src/scenes/graph-adapters';
+import { registerGraphAdapter, resolveGraphAdapter } from '../../src/scenes/graph-adapters';
 import {
   autoInitGraphs,
   autoInitScenes,
@@ -7,13 +8,8 @@ import {
   getSceneRegistry,
   initGraph,
   initScene,
-  resetRuntimeRegistry
+  resetRuntimeRegistry,
 } from '../../src/scenes/runtime';
-import {
-  registerGraphAdapter,
-  resolveGraphAdapter
-} from '../../src/scenes/graph-adapters';
-import type { GraphAdapterMountArgs, GraphAdapter } from '../../src/scenes/graph-adapters';
 
 function createPassThroughAdapter(kind: string): GraphAdapter {
   return {
@@ -29,12 +25,12 @@ function createPassThroughAdapter(kind: string): GraphAdapter {
         outputs: args.definition.outputs || [],
         dependsOn: args.definition.dependsOn || [],
         sceneId: args.sceneId,
-        createdAtMs: Date.now()
+        createdAtMs: Date.now(),
       };
     },
     readOutput(instance, outputKey) {
       return (instance.options as Record<string, unknown>)[outputKey];
-    }
+    },
   };
 }
 
@@ -198,10 +194,13 @@ describe('scene runtime', () => {
     scene.appendChild(graph);
     document.body.appendChild(scene);
 
-    const initSpy = vi.fn((target: string | Element, options?: Record<string, unknown>) => ({ target, options }));
+    const initSpy = vi.fn((target: string | Element, options?: Record<string, unknown>) => ({
+      target,
+      options,
+    }));
     const fakeLegacyApi = {
       init: initSpy,
-      autoInit: () => []
+      autoInit: () => [],
     };
 
     const first = initGraph(graph, { weeklyRevenue0: 100 }, fakeLegacyApi);
@@ -215,9 +214,9 @@ describe('scene runtime', () => {
         graphs: [
           {
             mount: graph,
-            options: { weeklyRevenue0: 500 }
-          }
-        ]
+            options: { weeklyRevenue0: 500 },
+          },
+        ],
       },
       fakeLegacyApi
     );
@@ -255,9 +254,9 @@ describe('scene runtime', () => {
           outputs: [
             {
               outputKey: 'weeklyRevenue0',
-              storeKey: 'seedRevenue'
-            }
-          ]
+              storeKey: 'seedRevenue',
+            },
+          ],
         },
         {
           graphId: 'graph-target',
@@ -266,17 +265,17 @@ describe('scene runtime', () => {
             {
               source: { graphId: 'graph-source' },
               event: 'graph:output',
-              outputKey: 'weeklyRevenue0'
-            }
+              outputKey: 'weeklyRevenue0',
+            },
           ],
           inputs: [
             {
               optionKey: 'weeklyRevenue0',
-              storeKey: 'seedRevenue'
-            }
-          ]
-        }
-      ]
+              storeKey: 'seedRevenue',
+            },
+          ],
+        },
+      ],
     });
 
     expect(sceneInstance).not.toBeNull();
@@ -313,9 +312,9 @@ describe('scene runtime', () => {
           outputs: [
             {
               outputKey: 'weeklyFixedExpenses',
-              storeKey: 'sceneFixed'
-            }
-          ]
+              storeKey: 'sceneFixed',
+            },
+          ],
         },
         {
           graphId: 'selector-target',
@@ -324,17 +323,17 @@ describe('scene runtime', () => {
             {
               source: { selector: '.source-graph' },
               event: 'graph:output',
-              outputKey: 'weeklyFixedExpenses'
-            }
+              outputKey: 'weeklyFixedExpenses',
+            },
           ],
           inputs: [
             {
               optionKey: 'weeklyFixedExpenses',
-              storeKey: 'sceneFixed'
-            }
-          ]
-        }
-      ]
+              storeKey: 'sceneFixed',
+            },
+          ],
+        },
+      ],
     });
 
     expect(sceneInstance?.orchestrationEnabled).toBe(true);
@@ -356,14 +355,14 @@ describe('scene runtime', () => {
     const sceneInstance = initScene({
       mount: scene,
       sharedState: {
-        baseRevenue: 120
+        baseRevenue: 120,
       },
       derivedState: [
         {
           key: 'derivedRevenue',
           dependsOn: ['baseRevenue'],
-          derive: (state) => Number(state.baseRevenue || 0) * 2
-        }
+          derive: (state) => Number(state.baseRevenue || 0) * 2,
+        },
       ],
       graphs: [
         {
@@ -372,11 +371,11 @@ describe('scene runtime', () => {
           inputs: [
             {
               optionKey: 'weeklyRevenue0',
-              storeKey: 'derivedRevenue'
-            }
-          ]
-        }
-      ]
+              storeKey: 'derivedRevenue',
+            },
+          ],
+        },
+      ],
     });
 
     expect(sceneInstance?.orchestrationEnabled).toBe(true);
@@ -418,11 +417,11 @@ describe('scene runtime', () => {
           outputs: [
             {
               outputKey: 'weeklyRevenue0',
-              storeKey: 'customRevenue'
-            }
-          ]
-        }
-      ]
+              storeKey: 'customRevenue',
+            },
+          ],
+        },
+      ],
     });
 
     const mountedGraph = getGraphRegistry().getById('custom-target');
@@ -470,18 +469,18 @@ describe('scene runtime', () => {
           outputs: args.definition.outputs || [],
           dependsOn: args.definition.dependsOn || [],
           sceneId: args.sceneId,
-          createdAtMs: Date.now()
+          createdAtMs: Date.now(),
         };
       },
       readOutput(instance, outputKey) {
         return (instance.options as Record<string, unknown>)[outputKey];
-      }
+      },
     });
 
     const sceneInstance = initScene({
       mount: scene,
       sharedState: {
-        seed: 7
+        seed: 7,
       },
       graphs: [
         {
@@ -491,25 +490,25 @@ describe('scene runtime', () => {
           inputs: [
             {
               optionKey: 'custom:metric',
-              storeKey: 'seed'
+              storeKey: 'seed',
             },
             {
               optionKey: 'ignored:metric',
-              storeKey: 'seed'
-            }
+              storeKey: 'seed',
+            },
           ],
           outputs: [
             {
               outputKey: 'custom:metric',
-              storeKey: 'customMetric'
+              storeKey: 'customMetric',
             },
             {
               outputKey: 'ignored:metric',
-              storeKey: 'ignoredMetric'
-            }
-          ]
-        }
-      ]
+              storeKey: 'ignoredMetric',
+            },
+          ],
+        },
+      ],
     });
 
     const mountedGraph = getGraphRegistry().getById('custom-binding-target');
@@ -533,7 +532,7 @@ describe('scene runtime', () => {
     registerGraphAdapter({
       kind: customKind,
       normalizeOptions(options) {
-        const next = { ...(options as Record<string, unknown> || {}) };
+        const next = { ...((options as Record<string, unknown>) || {}) };
         const raw = next.customMetric;
         if (typeof raw !== 'undefined') {
           next.customMetric = Number(raw) * 10;
@@ -551,18 +550,18 @@ describe('scene runtime', () => {
           outputs: args.definition.outputs || [],
           dependsOn: args.definition.dependsOn || [],
           sceneId: args.sceneId,
-          createdAtMs: Date.now()
+          createdAtMs: Date.now(),
         };
       },
       readOutput(instance, outputKey) {
         return (instance.options as Record<string, unknown>)[outputKey];
-      }
+      },
     });
 
     const sceneInstance = initScene({
       mount: scene,
       sharedState: {
-        seed: '7'
+        seed: '7',
       },
       graphs: [
         {
@@ -572,11 +571,11 @@ describe('scene runtime', () => {
           inputs: [
             {
               optionKey: 'customMetric',
-              storeKey: 'seed'
-            }
-          ]
-        }
-      ]
+              storeKey: 'seed',
+            },
+          ],
+        },
+      ],
     });
 
     const initialGraph = getGraphRegistry().getById('store-normalize-target');
@@ -607,11 +606,11 @@ describe('scene runtime', () => {
           inputs: [
             {
               optionKey: 'weeklyRevenue0',
-              storeKey: null
-            }
-          ]
-        }
-      ]
+              storeKey: null,
+            },
+          ],
+        },
+      ],
     } as unknown as Parameters<typeof initScene>[0];
 
     const mountMalformedScene = () => initScene(malformedScene);
@@ -634,21 +633,21 @@ describe('scene runtime', () => {
     const malformedScene = {
       mount: scene,
       sharedState: {
-        baseRevenue: 100
+        baseRevenue: 100,
       },
       derivedState: [
         {
           key: null,
           dependsOn: ['baseRevenue'],
-          derive: (state: Readonly<Record<string, unknown>>) => Number(state.baseRevenue || 0) * 3
-        }
+          derive: (state: Readonly<Record<string, unknown>>) => Number(state.baseRevenue || 0) * 3,
+        },
       ],
       graphs: [
         {
           graphId: 'bad-derived-target',
-          mount: target
-        }
-      ]
+          mount: target,
+        },
+      ],
     } as unknown as Parameters<typeof initScene>[0];
 
     const mountMalformedScene = () => initScene(malformedScene);
@@ -677,9 +676,9 @@ describe('scene runtime', () => {
         {
           graphId: 'reset-adapter-a',
           kind: customKind,
-          mount: firstTarget
-        }
-      ]
+          mount: firstTarget,
+        },
+      ],
     });
 
     expect(firstInstance?.graphs.length).toBe(1);
@@ -701,9 +700,9 @@ describe('scene runtime', () => {
         {
           graphId: 'reset-adapter-b',
           kind: customKind,
-          mount: secondTarget
-        }
-      ]
+          mount: secondTarget,
+        },
+      ],
     });
 
     expect(secondInstance).not.toBeNull();

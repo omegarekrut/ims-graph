@@ -4,7 +4,7 @@ import { DEFAULT_GROWTH_STATE } from '../../src/core/defaults';
 import {
   defaultedGrowthOptions,
   normalizeGrowthOptions,
-  readGrowthOptionsFromElement
+  readGrowthOptionsFromElement,
 } from '../../src/core/options';
 
 describe('core growth options', () => {
@@ -17,7 +17,7 @@ describe('core growth options', () => {
       grossMargin: Number.NaN,
       weeklyFixedExpenses: 3000,
       yearsMin: 2,
-      yearsMax: 8
+      yearsMax: 8,
     });
 
     expect(normalized).toEqual({
@@ -26,7 +26,7 @@ describe('core growth options', () => {
       weeklyRevenue0: 420,
       weeklyFixedExpenses: 3000,
       yearsMin: 2,
-      yearsMax: 8
+      yearsMax: 8,
     });
   });
 
@@ -49,7 +49,7 @@ describe('core growth options', () => {
       grossMargin: 0.65,
       weeklyFixedExpenses: 1800,
       yearsMin: 3,
-      yearsMax: 11
+      yearsMax: 11,
     });
   });
 
@@ -69,12 +69,12 @@ describe('core growth options', () => {
 
   it('applies defaults after normalization', () => {
     const options = defaultedGrowthOptions({
-      weeklyRevenue0: 900
+      weeklyRevenue0: 900,
     });
 
     expect(options).toEqual({
       ...DEFAULT_GROWTH_STATE,
-      weeklyRevenue0: 900
+      weeklyRevenue0: 900,
     });
   });
 });

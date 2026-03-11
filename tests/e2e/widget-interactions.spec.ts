@@ -5,7 +5,7 @@ import {
   fillAndApplyInput,
   waitForWidgetMount,
   widgetInput,
-  widgetSummary
+  widgetSummary,
 } from './helpers/widget';
 
 test.describe('widget interactions', () => {
@@ -84,6 +84,11 @@ test.describe('widget interactions', () => {
     }
 
     await page.mouse.move(hitBox.x + hitBox.width / 2, hitBox.y + hitBox.height / 2);
-    await expect(mount.locator('svg text').filter({ hasText: /^Revenue \$/ }).first()).toBeVisible();
+    await expect(
+      mount
+        .locator('svg text')
+        .filter({ hasText: /^Revenue \$/ })
+        .first()
+    ).toBeVisible();
   });
 });

@@ -113,7 +113,10 @@ describe('legacy calculator golden behavior', () => {
       expect(instance.nodes.inputGrowth.value).toBe(fixture.inputs.growth);
       expect(instance.chart.ticksY.length).toBe(fixture.yDomain.tickCount);
       expect(instance.chart.ticksY[0]).toBeCloseTo(fixture.yDomain.firstTick, 10);
-      expect(instance.chart.ticksY[instance.chart.ticksY.length - 1]).toBeCloseTo(fixture.yDomain.lastTick, 10);
+      expect(instance.chart.ticksY[instance.chart.ticksY.length - 1]).toBeCloseTo(
+        fixture.yDomain.lastTick,
+        10
+      );
     });
   });
 
@@ -128,7 +131,7 @@ describe('legacy calculator golden behavior', () => {
       grossMargin: -10,
       weeklyFixedExpenses: -500,
       yearsMin: 0,
-      yearsMax: 500
+      yearsMax: 500,
     });
 
     expect(instance).not.toBeNull();
@@ -157,7 +160,9 @@ describe('legacy calculator golden behavior', () => {
       return;
     }
 
-    const monthRadio = mount.querySelector('input[data-group="units"][value="month"]') as HTMLInputElement | null;
+    const monthRadio = mount.querySelector(
+      'input[data-group="units"][value="month"]'
+    ) as HTMLInputElement | null;
     expect(monthRadio).not.toBeNull();
     if (!monthRadio) {
       return;
@@ -190,7 +195,7 @@ describe('legacy calculator golden behavior', () => {
       grossMargin: 0.7,
       weeklyFixedExpenses: 2100,
       yearsMin: 1,
-      yearsMax: 7
+      yearsMax: 7,
     });
     expect(instance).not.toBeNull();
     if (!instance) {

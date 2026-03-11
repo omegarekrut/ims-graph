@@ -1,7 +1,4 @@
-import type {
-  GraphDependency,
-  GraphId
-} from '../core/contracts';
+import type { GraphDependency, GraphId } from '../core/contracts';
 import { toGraphId } from '../shared/ids';
 import type { ResolvedGraphDefinition } from './scene-normalization';
 
@@ -26,9 +23,7 @@ function resolveDependencySourceIds(
     return [];
   }
 
-  return graphs
-    .filter((graph) => graph.mount.matches(selector))
-    .map((graph) => graph.graphId);
+  return graphs.filter((graph) => graph.mount.matches(selector)).map((graph) => graph.graphId);
 }
 
 export function orderSceneGraphsByDependencies(
@@ -111,7 +106,7 @@ export function createDependencyIndex(
           sourceGraphId,
           targetGraphId: targetGraph.graphId,
           event: dependencyEvent,
-          outputKey: dependency.outputKey
+          outputKey: dependency.outputKey,
         });
         index.set(sourceGraphId, links);
       });

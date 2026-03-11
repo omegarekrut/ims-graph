@@ -1,10 +1,9 @@
+import type { GraphMountTarget, GrowthCalculatorOptions } from '../core/contracts';
 import { normalizeGrowthOptions } from '../core/options';
-import type {
-  GraphMountTarget,
-  GrowthCalculatorOptions
-} from '../core/contracts';
 
-export function normalizeLegacyTarget(target: GraphMountTarget | null | undefined): GraphMountTarget | null {
+export function normalizeLegacyTarget(
+  target: GraphMountTarget | null | undefined
+): GraphMountTarget | null {
   if (typeof target === 'string' && target.trim() === '') {
     return null;
   }
@@ -16,6 +15,8 @@ export function normalizeLegacyTarget(target: GraphMountTarget | null | undefine
   return target;
 }
 
-export function normalizeLegacyOptions(options: GrowthCalculatorOptions | undefined): GrowthCalculatorOptions {
+export function normalizeLegacyOptions(
+  options: GrowthCalculatorOptions | undefined
+): GrowthCalculatorOptions {
   return normalizeGrowthOptions(options);
 }

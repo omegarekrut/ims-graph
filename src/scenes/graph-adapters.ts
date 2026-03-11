@@ -9,7 +9,7 @@ import type {
   GrowthCalculatorOptions,
   LegacyGrowthCalculatorApi,
   SceneId,
-  SceneSharedStore
+  SceneSharedStore,
 } from '../core/contracts';
 import { normalizeGrowthOptions } from '../core/options';
 import { mountGrowthWidget } from '../widgets/growth-widget';
@@ -31,7 +31,11 @@ export interface GraphAdapter {
   readOutput(instance: GraphInstance, outputKey: string): unknown;
   normalizeInputs?(inputs: GraphInputBinding[]): GraphInputBinding[];
   normalizeOutputs?(outputs: GraphOutputBinding[]): GraphOutputBinding[];
-  applyStoreInputs?(options: GraphOptions, inputs: GraphInputBinding[], store: SceneSharedStore): GraphOptions;
+  applyStoreInputs?(
+    options: GraphOptions,
+    inputs: GraphInputBinding[],
+    store: SceneSharedStore
+  ): GraphOptions;
 }
 
 const GROWTH_OPTION_KEYS = new Set<string>([
@@ -42,7 +46,7 @@ const GROWTH_OPTION_KEYS = new Set<string>([
   'grossMargin',
   'weeklyFixedExpenses',
   'yearsMin',
-  'yearsMax'
+  'yearsMax',
 ]);
 
 function isGrowthOptionKey(value: string): value is keyof GrowthCalculatorOptions {
@@ -86,7 +90,7 @@ function applyGrowthStoreInputs(
 
   return {
     ...options,
-    ...normalizedPatch
+    ...normalizedPatch,
   };
 }
 
@@ -115,7 +119,7 @@ const growthCalculatorAdapter: GraphAdapter = {
       legacyApi: args.legacyApi,
       inputs: args.definition.inputs,
       outputs: args.definition.outputs,
-      dependsOn: args.definition.dependsOn
+      dependsOn: args.definition.dependsOn,
     });
   },
   readOutput(instance, outputKey) {
@@ -129,14 +133,16 @@ const growthCalculatorAdapter: GraphAdapter = {
   },
   applyStoreInputs(options, inputs, store) {
     return applyGrowthStoreInputs(options, inputs, store);
-  }
+  },
 };
 
 export class GraphAdapterRegistry {
   private readonly byKind = new Map<GraphKind, GraphAdapter>();
 
   constructor(adapters: GraphAdapter[] = []) {
-    adapters.forEach((adapter) => this.register(adapter));
+    adapters.forEach((adapter) => {
+      this.register(adapter);
+    });
   }
 
   register(adapter: GraphAdapter): void {
@@ -176,7 +182,7 @@ export function normalizeGraphOptionsForKind(
   options: GraphOptions | undefined
 ): GraphOptions {
   const adapter = resolveGraphAdapter(kind);
-  if (adapter && adapter.normalizeOptions) {
+  if (adapter?.normalizeOptions) {
     return adapter.normalizeOptions(options);
   }
 
@@ -216,7 +222,7 @@ export function applyGraphStoreInputs(
   store: SceneSharedStore
 ): GraphOptions {
   const adapter = resolveGraphAdapter(kind);
-  if (adapter && adapter.applyStoreInputs) {
+  if (adapter?.applyStoreInputs) {
     return adapter.applyStoreInputs(options, bindings, store);
   }
 
@@ -235,7 +241,7 @@ export function applyGraphStoreInputs(
 
   return {
     ...options,
-    ...patch
+    ...patch,
   };
 }
 

@@ -5,20 +5,17 @@ import type {
   SceneGraphEvent,
   SceneId,
   SceneInstance,
-  SceneSharedStore
+  SceneSharedStore,
 } from '../core/contracts';
 import { readGraphOutputValue } from './graph-adapters';
 import {
   createDependencyIndex,
   createStoreInputIndex,
-  orderSceneGraphsByDependencies
+  orderSceneGraphsByDependencies,
 } from './scene-dependency-graph';
-import type {
-  ResolvedGraphDefinition,
-  ResolvedSceneDefinition
-} from './scene-normalization';
-import { withStoreInputs } from './scene-normalization';
 import { SceneEventBus } from './scene-events';
+import type { ResolvedGraphDefinition, ResolvedSceneDefinition } from './scene-normalization';
+import { withStoreInputs } from './scene-normalization';
 import { InMemorySceneStore } from './scene-store';
 
 export interface SceneOrchestrationContext {
@@ -41,7 +38,7 @@ function publishGraphReady(sceneId: SceneId, graph: GraphInstance, eventBus: Sce
     sceneId,
     graphId: graph.graphId,
     source: { graphId: graph.graphId },
-    timestampMs: Date.now()
+    timestampMs: Date.now(),
   });
 }
 
@@ -67,7 +64,7 @@ function publishGraphOutputs(
       storeKey: output.storeKey,
       source: { graphId: graph.graphId },
       value,
-      timestampMs: Date.now()
+      timestampMs: Date.now(),
     });
   });
 }
@@ -90,7 +87,7 @@ export function initSceneWithOrchestration(
     graphs: [],
     store,
     orchestrationEnabled: true,
-    createdAtMs: Date.now()
+    createdAtMs: Date.now(),
   };
 
   definition.graphs.forEach((graphDefinition) => {
@@ -148,19 +145,14 @@ export function initSceneWithOrchestration(
       graphId: mounted.graphId,
       outputKey: triggerOutputKey,
       source: sourceGraphId ? { graphId: sourceGraphId } : undefined,
-      timestampMs: Date.now()
+      timestampMs: Date.now(),
     });
     publishGraphOutputs(definition.sceneId, mounted, eventBus, store);
   };
 
   orderedGraphs.forEach((graphDefinition) => {
     const mergedDefinition = withStoreInputs(graphDefinition, store);
-    const graph = context.mountResolvedGraph(
-      mergedDefinition,
-      definition.sceneId,
-      legacyApi,
-      true
-    );
+    const graph = context.mountResolvedGraph(mergedDefinition, definition.sceneId, legacyApi, true);
 
     if (!graph) {
       return;
@@ -211,7 +203,7 @@ export function initSceneWithOrchestration(
       storeKey: storeEvent.key,
       value: storeEvent.value,
       source: storeEvent.sourceGraphId ? { graphId: storeEvent.sourceGraphId } : undefined,
-      timestampMs: Date.now()
+      timestampMs: Date.now(),
     });
 
     const targets = storeInputIndex.get(storeEvent.key);
@@ -231,7 +223,7 @@ export function initSceneWithOrchestration(
     type: 'scene:ready',
     sceneId: definition.sceneId,
     graphId: null,
-    timestampMs: Date.now()
+    timestampMs: Date.now(),
   });
 
   context.setSceneCleanup(definition.sceneId, () => {
@@ -251,12 +243,7 @@ export function initSceneWithoutOrchestration(
   const graphs: GraphInstance[] = [];
 
   definition.graphs.forEach((graphDefinition) => {
-    const graph = context.mountResolvedGraph(
-      graphDefinition,
-      definition.sceneId,
-      legacyApi,
-      true
-    );
+    const graph = context.mountResolvedGraph(graphDefinition, definition.sceneId, legacyApi, true);
     graph && graphs.push(graph);
   });
 
@@ -266,6 +253,6 @@ export function initSceneWithoutOrchestration(
     graphs,
     store: null,
     orchestrationEnabled: false,
-    createdAtMs: Date.now()
+    createdAtMs: Date.now(),
   };
 }

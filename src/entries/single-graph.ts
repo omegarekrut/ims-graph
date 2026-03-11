@@ -1,24 +1,14 @@
 import type {
   GraphInstance,
   GraphMountTarget,
+  GrowthCalculatorOptions,
   ImsGrowthCalculatorPublicApi,
   LegacyGrowthCalculatorApi,
-  GrowthCalculatorOptions
 } from '../core/contracts';
-import {
-  autoInitGraphs,
-  initGraph
-} from '../scenes/runtime';
-import {
-  normalizeLegacyOptions,
-  normalizeLegacyTarget
-} from '../widgets/legacy-bridge';
+import { autoInitGraphs, initGraph } from '../scenes/runtime';
 import { getLegacyApi } from '../widgets/legacy-api';
-import {
-  autoInitScene,
-  initScene,
-  setRuntimeLegacyApi
-} from './embed';
+import { normalizeLegacyOptions, normalizeLegacyTarget } from '../widgets/legacy-bridge';
+import { autoInitScene, initScene, setRuntimeLegacyApi } from './embed';
 
 interface SingleGraphBootstrapOptions {
   autoInit?: boolean;
@@ -38,9 +28,7 @@ function graphToLegacyInstance(graph: GraphInstance | null): unknown | null {
 }
 
 function graphsToLegacyInstances(graphs: GraphInstance[]): unknown[] {
-  return graphs
-    .map((graph) => graph.legacyInstance)
-    .filter((instance) => instance !== null);
+  return graphs.map((graph) => graph.legacyInstance).filter((instance) => instance !== null);
 }
 
 let runtimeLegacyApi: LegacyGrowthCalculatorApi | null = null;
@@ -76,7 +64,7 @@ export const singleGraphPublicApi: ImsGrowthCalculatorPublicApi = {
   init: initSingleGraphEmbed,
   autoInit: autoInitSingleGraphEmbed,
   initScene,
-  autoInitScene
+  autoInitScene,
 };
 
 function scheduleAutoInit(): void {

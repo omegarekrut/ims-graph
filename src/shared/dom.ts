@@ -1,10 +1,10 @@
-import {
-  DATA_GRAPH_SELECTOR,
-  DEFAULT_GRAPH_SELECTOR
-} from '../core/defaults';
 import type { GraphMountTarget } from '../core/contracts';
+import { DATA_GRAPH_SELECTOR, DEFAULT_GRAPH_SELECTOR } from '../core/defaults';
 
-export function resolveElement(target: GraphMountTarget, root: ParentNode = document): Element | null {
+export function resolveElement(
+  target: GraphMountTarget,
+  root: ParentNode = document
+): Element | null {
   if (typeof target !== 'string') {
     return target;
   }

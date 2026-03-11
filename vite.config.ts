@@ -3,25 +3,25 @@ import { defineConfig, type UserConfig } from 'vite';
 
 const HTML_INPUTS = {
   index: resolve(__dirname, 'index.html'),
-  previewShell: resolve(__dirname, 'preview-shell.html')
+  previewShell: resolve(__dirname, 'preview-shell.html'),
 };
 
 const WIDGET_ENTRIES = {
   singleGraph: resolve(__dirname, 'src/entries/single-graph.ts'),
-  sceneRuntime: resolve(__dirname, 'src/entries/scene-runtime.ts')
+  sceneRuntime: resolve(__dirname, 'src/entries/scene-runtime.ts'),
 };
 
 const WIDGET_OUTPUT_FILES = {
   embed: 'ims-growth-calculator.iife.js',
   scene: 'scene-runtime.iife.js',
-  legacy: 'webflow-growth-calculator.js'
+  legacy: 'webflow-growth-calculator.js',
 };
 
 function createSiteConfig(): UserConfig {
   return {
     base: './',
     server: {
-      open: 'preview-shell.html'
+      open: 'preview-shell.html',
     },
     build: {
       outDir: 'dist/site',
@@ -29,18 +29,14 @@ function createSiteConfig(): UserConfig {
       rollupOptions: {
         input: {
           index: HTML_INPUTS.index,
-          'preview-shell': HTML_INPUTS.previewShell
-        }
-      }
-    }
+          'preview-shell': HTML_INPUTS.previewShell,
+        },
+      },
+    },
   };
 }
 
-function createWidgetConfig(
-  entry: string,
-  fileName: string,
-  globalName: string
-): UserConfig {
+function createWidgetConfig(entry: string, fileName: string, globalName: string): UserConfig {
   return {
     build: {
       outDir: 'dist',
@@ -49,14 +45,14 @@ function createWidgetConfig(
         entry,
         name: globalName,
         formats: ['iife'],
-        fileName: () => fileName
+        fileName: () => fileName,
       },
       rollupOptions: {
         output: {
-          extend: true
-        }
-      }
-    }
+          extend: true,
+        },
+      },
+    },
   };
 }
 

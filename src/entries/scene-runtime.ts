@@ -1,3 +1,4 @@
+export { installBrowserRuntime } from './bootstrap-browser';
 export {
   autoInitEmbed,
   autoInitScene,
@@ -7,12 +8,8 @@ export {
   initSceneEmbed,
   loadLegacyRuntime,
   publicApi,
-  setRuntimeLegacyApi
+  setRuntimeLegacyApi,
 } from './embed';
-
-export {
-  installBrowserRuntime
-} from './bootstrap-browser';
 
 import { installBrowserRuntime } from './bootstrap-browser';
 

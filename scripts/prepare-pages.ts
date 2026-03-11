@@ -1,4 +1,4 @@
-import { cp, copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { copyFile, cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -109,7 +109,7 @@ function resolvePublishUrlContext(): PublishUrlContext {
   if (explicitBase) {
     return {
       baseUrl: trimTrailingSlash(explicitBase),
-      mode: 'absolute'
+      mode: 'absolute',
     };
   }
 
@@ -117,19 +117,17 @@ function resolvePublishUrlContext(): PublishUrlContext {
   if (githubPagesBase) {
     return {
       baseUrl: githubPagesBase,
-      mode: 'absolute'
+      mode: 'absolute',
     };
   }
 
   if (process.env.CI === 'true') {
-    throw new Error(
-      'Missing publish base URL. Set IMS_PAGES_BASE_URL or GITHUB_REPOSITORY in CI.'
-    );
+    throw new Error('Missing publish base URL. Set IMS_PAGES_BASE_URL or GITHUB_REPOSITORY in CI.');
   }
 
   return {
     baseUrl: '.',
-    mode: 'relative'
+    mode: 'relative',
   };
 }
 
@@ -137,7 +135,7 @@ function resolveBuildId(): string {
   const candidates = [
     resolveBuildCandidate(process.env.IMS_BUILD_ID),
     resolveBuildCandidate(process.env.GITHUB_SHA, 12),
-    resolveBuildCandidate(process.env.GITHUB_RUN_ID)
+    resolveBuildCandidate(process.env.GITHUB_RUN_ID),
   ];
   const buildId = candidates.find((candidate) => candidate !== null);
   if (buildId) {
@@ -174,10 +172,7 @@ function codepenPrefillUrl(context: PublishUrlContext, fileName: string): string
   return `${context.baseUrl}/codepen/${fileName}`;
 }
 
-async function rewritePrefillJsExternal(
-  prefillPath: string,
-  runtimeUrl: string
-): Promise<void> {
+async function rewritePrefillJsExternal(prefillPath: string, runtimeUrl: string): Promise<void> {
   const raw = await readFile(prefillPath, 'utf8');
   const parsed = JSON.parse(raw) as CodepenPrefill;
   parsed.js_external = runtimeUrl;
@@ -195,16 +190,16 @@ async function writeDeployManifest(
     urlMode: context.mode,
     stableAssets: {
       widget: publishedUrl(context, WIDGET_LATEST_FILE),
-      scene: publishedUrl(context, SCENE_LATEST_FILE)
+      scene: publishedUrl(context, SCENE_LATEST_FILE),
     },
     versionedAssets: {
       widget: publishedUrl(context, widgetVersionedFile),
-      scene: publishedUrl(context, sceneVersionedFile)
+      scene: publishedUrl(context, sceneVersionedFile),
     },
     codepenPrefills: {
       single: codepenPrefillUrl(context, 'prefill.json'),
-      scene: codepenPrefillUrl(context, 'scene-prefill.json')
-    }
+      scene: codepenPrefillUrl(context, 'scene-prefill.json'),
+    },
   };
 
   await writeFile(

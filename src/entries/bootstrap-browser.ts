@@ -1,10 +1,6 @@
 import type { ImsGrowthCalculatorPublicApi } from '../core/contracts';
 import { getLegacyApi } from '../widgets/legacy-api';
-import {
-  autoInitEmbed,
-  publicApi,
-  setRuntimeLegacyApi
-} from './embed';
+import { autoInitEmbed, publicApi, setRuntimeLegacyApi } from './embed';
 
 export interface BrowserBootstrapOptions {
   autoInit?: boolean;
@@ -31,7 +27,9 @@ function scheduleAutoInit(): void {
   autoInitEmbed();
 }
 
-export function installBrowserRuntime(options: BrowserBootstrapOptions = {}): ImsGrowthCalculatorPublicApi {
+export function installBrowserRuntime(
+  options: BrowserBootstrapOptions = {}
+): ImsGrowthCalculatorPublicApi {
   if (typeof window === 'undefined') {
     return publicApi;
   }

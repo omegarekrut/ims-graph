@@ -14,7 +14,7 @@ function createGraphInstance(graphId: string, mount: Element): GraphInstance {
     outputs: [],
     dependsOn: [],
     sceneId: null,
-    createdAtMs: Date.now()
+    createdAtMs: Date.now(),
   };
 }
 

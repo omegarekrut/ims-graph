@@ -2,7 +2,7 @@ import type {
   GraphId,
   SceneDerivedValueDefinition,
   SceneSharedStore,
-  SceneStoreChangeEvent
+  SceneStoreChangeEvent,
 } from '../core/contracts';
 
 const MAX_DERIVED_PASSES = 8;
@@ -21,7 +21,9 @@ function shallowCloneState(state: Map<string, unknown>): Record<string, unknown>
   return snapshot;
 }
 
-function normalizeDerivedState(derivedState: SceneDerivedValueDefinition[] | undefined): SceneDerivedValueDefinition[] {
+function normalizeDerivedState(
+  derivedState: SceneDerivedValueDefinition[] | undefined
+): SceneDerivedValueDefinition[] {
   if (!derivedState || !derivedState.length) {
     return [];
   }
@@ -42,7 +44,10 @@ export class InMemorySceneStore implements SceneSharedStore {
   private readonly derivedState: SceneDerivedValueDefinition[];
   private readonly listeners = new Set<StoreListener>();
 
-  constructor(initialState: Record<string, unknown> = {}, derivedState: SceneDerivedValueDefinition[] = []) {
+  constructor(
+    initialState: Record<string, unknown> = {},
+    derivedState: SceneDerivedValueDefinition[] = []
+  ) {
     this.derivedState = normalizeDerivedState(derivedState);
     this.setMany(initialState, null);
   }
@@ -73,7 +78,7 @@ export class InMemorySceneStore implements SceneSharedStore {
         previousValue,
         sourceGraphId,
         derived: false,
-        snapshot: this.snapshot()
+        snapshot: this.snapshot(),
       });
     });
 
@@ -123,7 +128,7 @@ export class InMemorySceneStore implements SceneSharedStore {
           previousValue,
           sourceGraphId,
           derived: true,
-          snapshot: this.snapshot()
+          snapshot: this.snapshot(),
         });
       });
 

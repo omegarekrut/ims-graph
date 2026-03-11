@@ -1,13 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import type {
-  GraphDependency,
-  GraphInputBinding
-} from '../../src/core/contracts';
+import type { GraphDependency, GraphInputBinding } from '../../src/core/contracts';
 import {
   createDependencyIndex,
   createStoreInputIndex,
-  orderSceneGraphsByDependencies
+  orderSceneGraphsByDependencies,
 } from '../../src/scenes/scene-dependency-graph';
 import type { ResolvedGraphDefinition } from '../../src/scenes/scene-normalization';
 
@@ -29,7 +26,7 @@ function createGraphDefinition(
     options: {},
     inputs,
     outputs: [],
-    dependsOn
+    dependsOn,
   };
 }
 
@@ -39,8 +36,8 @@ describe('scene dependency graph helpers', () => {
     const target = createGraphDefinition('target', [
       {
         source: { graphId: 'source' },
-        event: 'graph:ready'
-      }
+        event: 'graph:ready',
+      },
     ]);
 
     const ordered = orderSceneGraphsByDependencies([target, source]);
@@ -53,8 +50,8 @@ describe('scene dependency graph helpers', () => {
       {
         source: { selector: '.source-graph' },
         event: 'graph:output',
-        outputKey: 'weeklyRevenue0'
-      }
+        outputKey: 'weeklyRevenue0',
+      },
     ]);
 
     const index = createDependencyIndex([source, target]);
@@ -63,8 +60,8 @@ describe('scene dependency graph helpers', () => {
         sourceGraphId: 'source',
         targetGraphId: 'target',
         event: 'graph:output',
-        outputKey: 'weeklyRevenue0'
-      }
+        outputKey: 'weeklyRevenue0',
+      },
     ]);
   });
 
@@ -72,14 +69,14 @@ describe('scene dependency graph helpers', () => {
     const graphA = createGraphDefinition('graph-a', [
       {
         source: { graphId: 'graph-b' },
-        event: 'graph:ready'
-      }
+        event: 'graph:ready',
+      },
     ]);
     const graphB = createGraphDefinition('graph-b', [
       {
         source: { graphId: 'graph-a' },
-        event: 'graph:ready'
-      }
+        event: 'graph:ready',
+      },
     ]);
 
     const ordered = orderSceneGraphsByDependencies([graphA, graphB]);
@@ -87,22 +84,30 @@ describe('scene dependency graph helpers', () => {
   });
 
   it('indexes store input bindings by store key', () => {
-    const graphA = createGraphDefinition('graph-a', [], [
-      {
-        optionKey: 'weeklyRevenue0',
-        storeKey: 'sharedRevenue'
-      }
-    ]);
-    const graphB = createGraphDefinition('graph-b', [], [
-      {
-        optionKey: 'weeklyRevenue0',
-        storeKey: 'sharedRevenue'
-      },
-      {
-        optionKey: 'weeklyFixedExpenses',
-        storeKey: 'sharedFixed'
-      }
-    ]);
+    const graphA = createGraphDefinition(
+      'graph-a',
+      [],
+      [
+        {
+          optionKey: 'weeklyRevenue0',
+          storeKey: 'sharedRevenue',
+        },
+      ]
+    );
+    const graphB = createGraphDefinition(
+      'graph-b',
+      [],
+      [
+        {
+          optionKey: 'weeklyRevenue0',
+          storeKey: 'sharedRevenue',
+        },
+        {
+          optionKey: 'weeklyFixedExpenses',
+          storeKey: 'sharedFixed',
+        },
+      ]
+    );
 
     const index = createStoreInputIndex([graphA, graphB]);
     expect(Array.from(index.get('sharedRevenue') || [])).toEqual(['graph-a', 'graph-b']);

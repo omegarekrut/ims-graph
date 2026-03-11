@@ -1,7 +1,3 @@
-import {
-  defaultedGrowthOptions,
-  normalizeGrowthOptions
-} from '../core/options';
 import type {
   GraphDependency,
   GraphId,
@@ -10,8 +6,9 @@ import type {
   GraphOutputBinding,
   GrowthCalculatorOptions,
   LegacyGrowthCalculatorApi,
-  SceneId
+  SceneId,
 } from '../core/contracts';
+import { defaultedGrowthOptions, normalizeGrowthOptions } from '../core/options';
 
 export interface MountGrowthWidgetArgs {
   graphId: GraphId;
@@ -38,6 +35,6 @@ export function mountGrowthWidget(args: MountGrowthWidgetArgs): GraphInstance {
     outputs: args.outputs || [],
     dependsOn: args.dependsOn || [],
     sceneId: args.sceneId || null,
-    createdAtMs: Date.now()
+    createdAtMs: Date.now(),
   };
 }

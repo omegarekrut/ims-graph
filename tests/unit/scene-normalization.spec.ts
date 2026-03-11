@@ -5,7 +5,7 @@ import {
   normalizeGraphDependencies,
   normalizeGraphInputs,
   normalizeGraphOutputs,
-  normalizeSharedState
+  normalizeSharedState,
 } from '../../src/scenes/scene-normalization';
 
 describe('scene definition normalization', () => {
@@ -13,23 +13,23 @@ describe('scene definition normalization', () => {
     const normalized = normalizeGraphInputs('growth-calculator', [
       {
         optionKey: ' weeklyRevenue0 ',
-        storeKey: ' seedRevenue '
+        storeKey: ' seedRevenue ',
       },
       {
         optionKey: 'unknown-option',
-        storeKey: 'seedRevenue'
+        storeKey: 'seedRevenue',
       },
       {
         optionKey: '',
-        storeKey: 'seedRevenue'
-      }
+        storeKey: 'seedRevenue',
+      },
     ]);
 
     expect(normalized).toEqual([
       {
         optionKey: 'weeklyRevenue0',
-        storeKey: 'seedRevenue'
-      }
+        storeKey: 'seedRevenue',
+      },
     ]);
   });
 
@@ -37,27 +37,27 @@ describe('scene definition normalization', () => {
     const normalized = normalizeGraphOutputs('growth-calculator', [
       {
         outputKey: ' weeklyRevenue0 ',
-        storeKey: ' revenueOut '
+        storeKey: ' revenueOut ',
       },
       {
-        outputKey: 'graph-id'
+        outputKey: 'graph-id',
       },
       {
-        outputKey: 'unsupported-output'
-      }
+        outputKey: 'unsupported-output',
+      },
     ]);
 
     expect(normalized).toEqual([
       {
         outputKey: 'weeklyRevenue0',
         storeKey: 'revenueOut',
-        event: 'graph:output'
+        event: 'graph:output',
       },
       {
         outputKey: 'graph-id',
         storeKey: undefined,
-        event: 'graph:output'
-      }
+        event: 'graph:output',
+      },
     ]);
   });
 
@@ -65,57 +65,57 @@ describe('scene definition normalization', () => {
     const normalized = normalizeGraphDependencies([
       {
         source: {
-          graphId: ' source-graph '
-        }
+          graphId: ' source-graph ',
+        },
       },
       {
         source: {
-          selector: ' .source '
+          selector: ' .source ',
         },
         outputKey: 'weeklyRevenue0',
-        event: 'graph:output'
+        event: 'graph:output',
       },
       {
-        source: {}
-      }
+        source: {},
+      },
     ]);
 
     expect(normalized).toEqual([
       {
         source: {
           graphId: 'source-graph',
-          selector: undefined
+          selector: undefined,
         },
         event: 'graph:ready',
-        outputKey: undefined
+        outputKey: undefined,
       },
       {
         source: {
           graphId: undefined,
-          selector: '.source'
+          selector: '.source',
         },
         event: 'graph:output',
-        outputKey: 'weeklyRevenue0'
-      }
+        outputKey: 'weeklyRevenue0',
+      },
     ]);
   });
 
   it('normalizes shared and derived scene state', () => {
     const shared = normalizeSharedState({
-      baseRevenue: 120
+      baseRevenue: 120,
     });
 
     const derived = normalizeDerivedState([
       {
         key: ' derivedRevenue ',
         dependsOn: ['baseRevenue'],
-        derive: (state) => Number(state.baseRevenue || 0) * 2
+        derive: (state) => Number(state.baseRevenue || 0) * 2,
       },
       {
         key: '',
         dependsOn: ['baseRevenue'],
-        derive: (state) => Number(state.baseRevenue || 0)
-      }
+        derive: (state) => Number(state.baseRevenue || 0),
+      },
     ]);
 
     expect(shared).toEqual({ baseRevenue: 120 });

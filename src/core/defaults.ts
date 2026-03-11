@@ -17,5 +17,5 @@ export const DEFAULT_GROWTH_STATE: GrowthCalculatorState = {
   grossMargin: 1,
   weeklyFixedExpenses: 1600,
   yearsMin: 1,
-  yearsMax: 9
+  yearsMax: 9,
 };

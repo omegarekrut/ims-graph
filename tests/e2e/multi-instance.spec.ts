@@ -1,10 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-import {
-  fillAndApplyInput,
-  waitForWidgetMount,
-  widgetInput
-} from './helpers/widget';
+import { fillAndApplyInput, waitForWidgetMount, widgetInput } from './helpers/widget';
 
 test.describe('multi-instance scene behavior', () => {
   test('multiple auto-initialized widgets stay isolated', async ({ page }) => {
@@ -33,7 +29,7 @@ test.describe('multi-instance scene behavior', () => {
       runtimeWindow.__sceneInstance = window.ImsGrowthCalculator?.initScene({
         mount: '#scene-dependency',
         sharedState: {
-          sourceRevenueInput: 700
+          sourceRevenueInput: 700,
         },
         graphs: [
           {
@@ -42,15 +38,15 @@ test.describe('multi-instance scene behavior', () => {
             inputs: [
               {
                 optionKey: 'weeklyRevenue0',
-                storeKey: 'sourceRevenueInput'
-              }
+                storeKey: 'sourceRevenueInput',
+              },
             ],
             outputs: [
               {
                 outputKey: 'weeklyRevenue0',
-                storeKey: 'sharedRevenue'
-              }
-            ]
+                storeKey: 'sharedRevenue',
+              },
+            ],
           },
           {
             graphId: 'target-graph',
@@ -58,20 +54,20 @@ test.describe('multi-instance scene behavior', () => {
             inputs: [
               {
                 optionKey: 'weeklyRevenue0',
-                storeKey: 'sharedRevenue'
-              }
+                storeKey: 'sharedRevenue',
+              },
             ],
             dependsOn: [
               {
                 source: {
-                  graphId: 'source-graph'
+                  graphId: 'source-graph',
                 },
                 event: 'graph:output',
-                outputKey: 'weeklyRevenue0'
-              }
-            ]
-          }
-        ]
+                outputKey: 'weeklyRevenue0',
+              },
+            ],
+          },
+        ],
       });
     });
 

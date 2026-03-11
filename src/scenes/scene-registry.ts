@@ -1,7 +1,4 @@
-import type {
-  SceneId,
-  SceneInstance
-} from '../core/contracts';
+import type { SceneId, SceneInstance } from '../core/contracts';
 import { InMemoryGraphRegistry } from './graph-registry';
 
 const graphRegistry = new InMemoryGraphRegistry();
@@ -40,6 +37,8 @@ export function resetSceneRuntimeState(onGraphReset: () => void): void {
   sceneRegistryById.clear();
   sceneRegistryByMount = new WeakMap<Element, SceneInstance>();
 
-  sceneCleanupById.forEach((cleanup) => cleanup());
+  sceneCleanupById.forEach((cleanup) => {
+    cleanup();
+  });
   sceneCleanupById.clear();
 }

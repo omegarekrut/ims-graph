@@ -1,8 +1,4 @@
-import type {
-  GraphId,
-  GraphInstance,
-  GraphRegistry
-} from '../core/contracts';
+import type { GraphId, GraphInstance, GraphRegistry } from '../core/contracts';
 
 export class InMemoryGraphRegistry implements GraphRegistry {
   private readonly byId = new Map<GraphId, GraphInstance>();

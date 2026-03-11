@@ -7,13 +7,13 @@ import type {
   GraphOutputBinding,
   SceneDerivedValueDefinition,
   SceneId,
-  SceneSharedStore
+  SceneSharedStore,
 } from '../core/contracts';
 import {
   applyGraphStoreInputs,
-  normalizeGraphOptionsForKind,
   normalizeGraphInputBindings,
-  normalizeGraphOutputBindings
+  normalizeGraphOptionsForKind,
+  normalizeGraphOutputBindings,
 } from './graph-adapters';
 
 export interface ResolvedGraphDefinition {
@@ -63,7 +63,7 @@ export function normalizeGraphInputs(
 
     normalized.push({
       optionKey,
-      storeKey
+      storeKey,
     });
   });
 
@@ -90,54 +90,67 @@ export function normalizeGraphOutputs(
     }
 
     const event = entry.event === 'graph:output' ? entry.event : 'graph:output';
-    const storeKey = typeof entry.storeKey === 'string' && entry.storeKey.trim() !== ''
-      ? entry.storeKey.trim()
-      : undefined;
+    const storeKey =
+      typeof entry.storeKey === 'string' && entry.storeKey.trim() !== ''
+        ? entry.storeKey.trim()
+        : undefined;
 
     normalized.push({
       outputKey,
       storeKey,
-      event
+      event,
     });
   });
 
   return normalizeGraphOutputBindings(kind, normalized);
 }
 
-export function normalizeGraphDependencies(dependsOn: GraphDependency[] | undefined): GraphDependency[] {
+export function normalizeGraphDependencies(
+  dependsOn: GraphDependency[] | undefined
+): GraphDependency[] {
   if (!dependsOn || !dependsOn.length) {
     return [];
   }
 
-  return dependsOn.filter((entry) => {
-    if (!entry || typeof entry.source !== 'object' || entry.source === null) {
-      return false;
-    }
-    const hasGraphId = typeof entry.source.graphId === 'string' && entry.source.graphId.trim() !== '';
-    const hasSelector = typeof entry.source.selector === 'string' && entry.source.selector.trim() !== '';
-    return hasGraphId || hasSelector;
-  }).map((entry) => ({
-    source: {
-      graphId: typeof entry.source.graphId === 'string' && entry.source.graphId.trim() !== ''
-        ? entry.source.graphId.trim()
-        : undefined,
-      selector: typeof entry.source.selector === 'string' && entry.source.selector.trim() !== ''
-        ? entry.source.selector.trim()
-        : undefined
-    },
-    event: entry.event || 'graph:ready',
-    outputKey: entry.outputKey
-  }));
+  return dependsOn
+    .filter((entry) => {
+      if (!entry || typeof entry.source !== 'object' || entry.source === null) {
+        return false;
+      }
+      const hasGraphId =
+        typeof entry.source.graphId === 'string' && entry.source.graphId.trim() !== '';
+      const hasSelector =
+        typeof entry.source.selector === 'string' && entry.source.selector.trim() !== '';
+      return hasGraphId || hasSelector;
+    })
+    .map((entry) => ({
+      source: {
+        graphId:
+          typeof entry.source.graphId === 'string' && entry.source.graphId.trim() !== ''
+            ? entry.source.graphId.trim()
+            : undefined,
+        selector:
+          typeof entry.source.selector === 'string' && entry.source.selector.trim() !== ''
+            ? entry.source.selector.trim()
+            : undefined,
+      },
+      event: entry.event || 'graph:ready',
+      outputKey: entry.outputKey,
+    }));
 }
 
-export function normalizeSharedState(value: Record<string, unknown> | undefined): Record<string, unknown> {
+export function normalizeSharedState(
+  value: Record<string, unknown> | undefined
+): Record<string, unknown> {
   if (!value || typeof value !== 'object') {
     return {};
   }
   return { ...value };
 }
 
-export function normalizeDerivedState(value: SceneDerivedValueDefinition[] | undefined): SceneDerivedValueDefinition[] {
+export function normalizeDerivedState(
+  value: SceneDerivedValueDefinition[] | undefined
+): SceneDerivedValueDefinition[] {
   if (!value || !value.length) {
     return [];
   }
@@ -164,7 +177,7 @@ export function normalizeDerivedState(value: SceneDerivedValueDefinition[] | und
     normalized.push({
       key,
       dependsOn: entry.dependsOn,
-      derive: entry.derive
+      derive: entry.derive,
     });
   });
 
@@ -174,10 +187,7 @@ export function normalizeDerivedState(value: SceneDerivedValueDefinition[] | und
 export function shallowEqualGraphOptions(left: GraphOptions, right: GraphOptions): boolean {
   const leftRecord = left as Record<string, unknown>;
   const rightRecord = right as Record<string, unknown>;
-  const keys = new Set<string>([
-    ...Object.keys(leftRecord),
-    ...Object.keys(rightRecord)
-  ]);
+  const keys = new Set<string>([...Object.keys(leftRecord), ...Object.keys(rightRecord)]);
 
   for (const key of keys) {
     if (leftRecord[key] !== rightRecord[key]) {
@@ -188,7 +198,10 @@ export function shallowEqualGraphOptions(left: GraphOptions, right: GraphOptions
   return true;
 }
 
-export function shallowEqualGraphInputs(left: GraphInputBinding[], right: GraphInputBinding[]): boolean {
+export function shallowEqualGraphInputs(
+  left: GraphInputBinding[],
+  right: GraphInputBinding[]
+): boolean {
   if (left.length !== right.length) {
     return false;
   }
@@ -202,7 +215,10 @@ export function shallowEqualGraphInputs(left: GraphInputBinding[], right: GraphI
   });
 }
 
-export function shallowEqualGraphOutputs(left: GraphOutputBinding[], right: GraphOutputBinding[]): boolean {
+export function shallowEqualGraphOutputs(
+  left: GraphOutputBinding[],
+  right: GraphOutputBinding[]
+): boolean {
   if (left.length !== right.length) {
     return false;
   }
@@ -212,13 +228,18 @@ export function shallowEqualGraphOutputs(left: GraphOutputBinding[], right: Grap
     if (!rightEntry) {
       return false;
     }
-    return entry.outputKey === rightEntry.outputKey &&
+    return (
+      entry.outputKey === rightEntry.outputKey &&
       entry.storeKey === rightEntry.storeKey &&
-      (entry.event || 'graph:output') === (rightEntry.event || 'graph:output');
+      (entry.event || 'graph:output') === (rightEntry.event || 'graph:output')
+    );
   });
 }
 
-export function shallowEqualGraphDependencies(left: GraphDependency[], right: GraphDependency[]): boolean {
+export function shallowEqualGraphDependencies(
+  left: GraphDependency[],
+  right: GraphDependency[]
+): boolean {
   if (left.length !== right.length) {
     return false;
   }
@@ -228,20 +249,25 @@ export function shallowEqualGraphDependencies(left: GraphDependency[], right: Gr
     if (!rightEntry) {
       return false;
     }
-    return entry.source.graphId === rightEntry.source.graphId &&
+    return (
+      entry.source.graphId === rightEntry.source.graphId &&
       entry.source.selector === rightEntry.source.selector &&
       (entry.event || 'graph:ready') === (rightEntry.event || 'graph:ready') &&
-      entry.outputKey === rightEntry.outputKey;
+      entry.outputKey === rightEntry.outputKey
+    );
   });
 }
 
-export function mergeGraphOptions(current: GraphOptions, patch: GraphOptions | undefined): GraphOptions {
+export function mergeGraphOptions(
+  current: GraphOptions,
+  patch: GraphOptions | undefined
+): GraphOptions {
   if (!patch) {
     return current;
   }
   return {
     ...current,
-    ...patch
+    ...patch,
   };
 }
 
@@ -267,7 +293,7 @@ export function withStoreInputs(
 
   return {
     ...definition,
-    options: normalizedOptions
+    options: normalizedOptions,
   };
 }
 

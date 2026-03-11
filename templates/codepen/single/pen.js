@@ -1,6 +1,4 @@
-(function () {
-  'use strict';
-
+(() => {
   const MAX_BOOT_FRAMES = 120;
 
   function boot(remainingFrames) {

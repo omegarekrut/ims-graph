@@ -1,8 +1,3 @@
-import {
-  DEFAULT_GRAPH_KIND,
-  DEFAULT_GRAPH_SELECTOR
-} from '../core/defaults';
-import { readGrowthOptionsFromElement } from '../core/options';
 import type {
   GraphDefinition,
   GraphId,
@@ -12,32 +7,24 @@ import type {
   SceneDefinition,
   SceneId,
   SceneInstance,
-  SceneMountTarget
+  SceneMountTarget,
 } from '../core/contracts';
+import { DEFAULT_GRAPH_KIND, DEFAULT_GRAPH_SELECTOR } from '../core/defaults';
+import { readGrowthOptionsFromElement } from '../core/options';
 import {
   discoverGraphMounts,
   discoverSceneMounts,
   isElementInContainer,
   resolveElement,
-  uniqueElements
+  uniqueElements,
 } from '../shared/dom';
-import {
-  createGraphId,
-  createSceneId,
-  toGraphId,
-  toSceneId
-} from '../shared/ids';
+import { createGraphId, createSceneId, toGraphId, toSceneId } from '../shared/ids';
 import {
   mountGraphWithAdapter,
   normalizeGraphOptionsForKind,
-  resetGraphAdapters
+  resetGraphAdapters,
 } from './graph-adapters';
-import { InMemoryGraphRegistry } from './graph-registry';
-import {
-  initSceneWithOrchestration,
-  initSceneWithoutOrchestration,
-  type SceneOrchestrationContext
-} from './scene-orchestrator';
+import type { InMemoryGraphRegistry } from './graph-registry';
 import {
   mergeGraphOptions,
   normalizeDerivedState,
@@ -45,14 +32,19 @@ import {
   normalizeGraphInputs,
   normalizeGraphOutputs,
   normalizeSharedState,
+  type ResolvedGraphDefinition,
+  type ResolvedSceneDefinition,
   shallowEqualGraphDependencies,
   shallowEqualGraphInputs,
   shallowEqualGraphOptions,
   shallowEqualGraphOutputs,
   shouldEnableOrchestration,
-  type ResolvedGraphDefinition,
-  type ResolvedSceneDefinition
 } from './scene-normalization';
+import {
+  initSceneWithOrchestration,
+  initSceneWithoutOrchestration,
+  type SceneOrchestrationContext,
+} from './scene-orchestrator';
 import {
   getGraphRuntimeRegistry,
   getSceneById,
@@ -60,7 +52,7 @@ import {
   listScenes,
   registerScene,
   resetSceneRuntimeState,
-  setSceneCleanup
+  setSceneCleanup,
 } from './scene-registry';
 
 const graphRegistry = getGraphRuntimeRegistry();
@@ -123,13 +115,15 @@ function normalizeGraphDefinition(
   const kind = definition.kind || DEFAULT_GRAPH_KIND;
   const preferredGraphId = toGraphId(definition.graphId as string | null | undefined);
   return {
-    graphId: preferredGraphId ? ensureUniqueGraphId(preferredGraphId, mount) : deriveGraphIdFromMount(mount),
+    graphId: preferredGraphId
+      ? ensureUniqueGraphId(preferredGraphId, mount)
+      : deriveGraphIdFromMount(mount),
     kind,
     mount,
     options: normalizeGraphOptionsForKind(kind, definition.options),
     inputs: normalizeGraphInputs(kind, definition.inputs),
     outputs: normalizeGraphOutputs(kind, definition.outputs),
-    dependsOn: normalizeGraphDependencies(definition.dependsOn)
+    dependsOn: normalizeGraphDependencies(definition.dependsOn),
   };
 }
 
@@ -141,7 +135,7 @@ function buildGraphDefinitionFromMount(mount: Element): GraphDefinition {
     options: readGrowthOptionsFromElement(mount),
     inputs: [],
     outputs: [],
-    dependsOn: []
+    dependsOn: [],
   };
 }
 
@@ -170,8 +164,11 @@ function isOwnedByScene(sceneMount: Element, graphMount: Element): boolean {
 }
 
 function graphMountsWithinScene(sceneMount: Element): Element[] {
-  const discovered = discoverGraphMounts(sceneMount).filter((mount) => isOwnedByScene(sceneMount, mount));
-  const includeSceneMount = (isLegacyDefaultMount(sceneMount) || sceneMount.hasAttribute('data-ims-graph')) &&
+  const discovered = discoverGraphMounts(sceneMount).filter((mount) =>
+    isOwnedByScene(sceneMount, mount)
+  );
+  const includeSceneMount =
+    (isLegacyDefaultMount(sceneMount) || sceneMount.hasAttribute('data-ims-graph')) &&
     isOwnedByScene(sceneMount, sceneMount);
   if (!includeSceneMount) {
     return discovered;
@@ -179,7 +176,10 @@ function graphMountsWithinScene(sceneMount: Element): Element[] {
   return uniqueElements([sceneMount, ...discovered]);
 }
 
-function definitionFromSceneInput(scene: SceneDefinition, root: ParentNode): ResolvedSceneDefinition | null {
+function definitionFromSceneInput(
+  scene: SceneDefinition,
+  root: ParentNode
+): ResolvedSceneDefinition | null {
   const mount = resolveSceneMount(scene.mount, root);
   if (!mount) {
     return null;
@@ -202,7 +202,7 @@ function definitionFromSceneInput(scene: SceneDefinition, root: ParentNode): Res
     mount,
     graphs,
     sharedState: normalizeSharedState(scene.sharedState),
-    derivedState: normalizeDerivedState(scene.derivedState)
+    derivedState: normalizeDerivedState(scene.derivedState),
   };
 }
 
@@ -224,9 +224,20 @@ function mountResolvedGraph(
     const hasOptionsUpdate = !shallowEqualGraphOptions(existing.options, nextOptions);
     const hasInputUpdate = !shallowEqualGraphInputs(existing.inputs, definition.inputs);
     const hasOutputUpdate = !shallowEqualGraphOutputs(existing.outputs, definition.outputs);
-    const hasDependencyUpdate = !shallowEqualGraphDependencies(existing.dependsOn, definition.dependsOn);
+    const hasDependencyUpdate = !shallowEqualGraphDependencies(
+      existing.dependsOn,
+      definition.dependsOn
+    );
 
-    if (!hasGraphIdUpdate && !hasSceneUpdate && !hasKindUpdate && !hasOptionsUpdate && !hasInputUpdate && !hasOutputUpdate && !hasDependencyUpdate) {
+    if (
+      !hasGraphIdUpdate &&
+      !hasSceneUpdate &&
+      !hasKindUpdate &&
+      !hasOptionsUpdate &&
+      !hasInputUpdate &&
+      !hasOutputUpdate &&
+      !hasDependencyUpdate
+    ) {
       return existing;
     }
 
@@ -237,7 +248,7 @@ function mountResolvedGraph(
       options: nextOptions,
       sceneId: nextSceneId,
       legacyApi,
-      definition
+      definition,
     });
 
     if (!remounted) {
@@ -254,7 +265,7 @@ function mountResolvedGraph(
     options: definition.options,
     sceneId,
     legacyApi,
-    definition
+    definition,
   });
 
   if (!mounted) {
@@ -266,7 +277,7 @@ function mountResolvedGraph(
 
 const sceneOrchestrationContext: SceneOrchestrationContext = {
   mountResolvedGraph,
-  setSceneCleanup
+  setSceneCleanup,
 };
 
 function initGraphDefinition(
@@ -304,7 +315,7 @@ export function initGraph(
       kind: DEFAULT_GRAPH_KIND,
       inputs: [],
       outputs: [],
-      dependsOn: []
+      dependsOn: [],
     },
     document,
     null,
@@ -333,7 +344,13 @@ export function autoInitGraphs(
       return;
     }
 
-    const graph = initGraphDefinition(buildGraphDefinitionFromMount(mount), root, null, legacyApi, true);
+    const graph = initGraphDefinition(
+      buildGraphDefinitionFromMount(mount),
+      root,
+      null,
+      legacyApi,
+      true
+    );
     graph && initialized.push(graph);
   });
 
@@ -348,9 +365,10 @@ export function initScene(
     return null;
   }
 
-  const definition = typeof scene === 'object' && !isElementTarget(scene)
-    ? definitionFromSceneInput(scene as SceneDefinition, document)
-    : definitionFromSceneInput({ mount: scene as SceneMountTarget }, document);
+  const definition =
+    typeof scene === 'object' && !isElementTarget(scene)
+      ? definitionFromSceneInput(scene as SceneDefinition, document)
+      : definitionFromSceneInput({ mount: scene as SceneMountTarget }, document);
   if (!definition) {
     return null;
   }

@@ -18,7 +18,7 @@ describe('scene shared store', () => {
     expect(listener.mock.calls[0]?.[0]).toMatchObject({
       key: 'revenue',
       value: 120,
-      derived: false
+      derived: false,
     });
   });
 
@@ -27,20 +27,20 @@ describe('scene shared store', () => {
       {
         key: 'doubleBase',
         dependsOn: ['base'],
-        derive: (state) => Number(state.base || 0) * 2
+        derive: (state) => Number(state.base || 0) * 2,
       },
       {
         key: 'quadBase',
         dependsOn: ['doubleBase'],
-        derive: (state) => Number(state.doubleBase || 0) * 2
-      }
+        derive: (state) => Number(state.doubleBase || 0) * 2,
+      },
     ];
 
     const store = new InMemorySceneStore({ base: 2 }, derivedState);
     expect(store.snapshot()).toEqual({
       base: 2,
       doubleBase: 4,
-      quadBase: 8
+      quadBase: 8,
     });
 
     const events: Array<{ key: string; derived: boolean }> = [];
@@ -53,7 +53,7 @@ describe('scene shared store', () => {
     expect(store.snapshot()).toEqual({
       base: 3,
       doubleBase: 6,
-      quadBase: 12
+      quadBase: 12,
     });
     expect(events).toContainEqual({ key: 'base', derived: false });
     expect(events).toContainEqual({ key: 'doubleBase', derived: true });
@@ -65,13 +65,13 @@ describe('scene shared store', () => {
       {
         key: '',
         dependsOn: ['base'],
-        derive: () => 1
+        derive: () => 1,
       },
       {
         key: 'valid',
         dependsOn: [],
-        derive: () => 2
-      }
+        derive: () => 2,
+      },
     ] as unknown as SceneDerivedValueDefinition[];
 
     const store = new InMemorySceneStore({ base: 1 }, malformed);

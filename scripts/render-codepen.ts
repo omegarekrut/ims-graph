@@ -41,21 +41,23 @@ const PEN_VARIANTS: PenVariantDefinition[] = [
     templateDir: resolve(TEMPLATE_ROOT_DIR, 'single'),
     outputBaseName: 'pen',
     prefillFileName: 'prefill.json',
-    runtimeKind: 'widget'
+    runtimeKind: 'widget',
   },
   {
     id: 'scene',
     templateDir: resolve(TEMPLATE_ROOT_DIR, 'scene'),
     outputBaseName: 'scene-pen',
     prefillFileName: 'scene-prefill.json',
-    runtimeKind: 'scene'
-  }
+    runtimeKind: 'scene',
+  },
 ];
 
 function applyRuntimePlaceholders(template: string): string {
   return template
-    .split('__IMS_WIDGET_RUNTIME_URL__').join(WIDGET_RUNTIME_URL)
-    .split('__IMS_SCENE_RUNTIME_URL__').join(SCENE_RUNTIME_URL);
+    .split('__IMS_WIDGET_RUNTIME_URL__')
+    .join(WIDGET_RUNTIME_URL)
+    .split('__IMS_SCENE_RUNTIME_URL__')
+    .join(SCENE_RUNTIME_URL);
 }
 
 function resolveRuntimeUrl(runtimeKind: RuntimeKind): string {
@@ -100,7 +102,7 @@ async function buildPrefill(
     html,
     css,
     js,
-    js_external: resolveRuntimeUrl(variant.runtimeKind)
+    js_external: resolveRuntimeUrl(variant.runtimeKind),
   };
 }
 

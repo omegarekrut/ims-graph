@@ -1,8 +1,4 @@
-import type {
-  GraphId,
-  SceneGraphEvent,
-  SceneGraphEventType
-} from '../core/contracts';
+import type { GraphId, SceneGraphEvent, SceneGraphEventType } from '../core/contracts';
 
 export interface SceneEventFilter {
   type?: SceneGraphEventType;
@@ -15,7 +11,8 @@ type SceneEventListener = (event: SceneGraphEvent) => void;
 function matchesFilter(event: SceneGraphEvent, filter: SceneEventFilter): boolean {
   const matchesType = !filter.type || filter.type === event.type;
   const matchesGraph = typeof filter.graphId === 'undefined' || filter.graphId === event.graphId;
-  const matchesOutput = typeof filter.outputKey === 'undefined' || filter.outputKey === event.outputKey;
+  const matchesOutput =
+    typeof filter.outputKey === 'undefined' || filter.outputKey === event.outputKey;
   return matchesType && matchesGraph && matchesOutput;
 }
 
@@ -39,7 +36,7 @@ export class SceneEventBus {
   subscribe(filter: SceneEventFilter, listener: SceneEventListener): () => void {
     const subscription: SceneEventSubscription = {
       filter,
-      listener
+      listener,
     };
     this.subscriptions.add(subscription);
 

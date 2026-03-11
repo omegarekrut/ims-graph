@@ -1,13 +1,5 @@
-import {
-  DEFAULT_GROWTH_STATE,
-  VALID_EXPENSE_VIZ,
-  VALID_UNITS
-} from './defaults';
-import type {
-  ExpenseViz,
-  GrowthCalculatorOptions,
-  Unit
-} from './contracts';
+import type { ExpenseViz, GrowthCalculatorOptions, Unit } from './contracts';
+import { DEFAULT_GROWTH_STATE, VALID_EXPENSE_VIZ, VALID_UNITS } from './defaults';
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && !Number.isNaN(value);
@@ -34,22 +26,40 @@ function readDataValue(el: Element, name: string): string | undefined {
   return typeof value === 'string' ? value : undefined;
 }
 
-export function normalizeGrowthOptions(options: GrowthCalculatorOptions | undefined): GrowthCalculatorOptions {
+export function normalizeGrowthOptions(
+  options: GrowthCalculatorOptions | undefined
+): GrowthCalculatorOptions {
   if (!options) {
     return {};
   }
 
   const normalized: GrowthCalculatorOptions = {};
 
-  isUnit(options.units) && (normalized.units = options.units);
-  isExpenseViz(options.expenseViz) && (normalized.expenseViz = options.expenseViz);
+  if (isUnit(options.units)) {
+    normalized.units = options.units;
+  }
+  if (isExpenseViz(options.expenseViz)) {
+    normalized.expenseViz = options.expenseViz;
+  }
 
-  isFiniteNumber(options.weeklyRevenue0) && (normalized.weeklyRevenue0 = options.weeklyRevenue0);
-  isFiniteNumber(options.weeklyGrowthRate) && (normalized.weeklyGrowthRate = options.weeklyGrowthRate);
-  isFiniteNumber(options.grossMargin) && (normalized.grossMargin = options.grossMargin);
-  isFiniteNumber(options.weeklyFixedExpenses) && (normalized.weeklyFixedExpenses = options.weeklyFixedExpenses);
-  isFiniteNumber(options.yearsMin) && (normalized.yearsMin = options.yearsMin);
-  isFiniteNumber(options.yearsMax) && (normalized.yearsMax = options.yearsMax);
+  if (isFiniteNumber(options.weeklyRevenue0)) {
+    normalized.weeklyRevenue0 = options.weeklyRevenue0;
+  }
+  if (isFiniteNumber(options.weeklyGrowthRate)) {
+    normalized.weeklyGrowthRate = options.weeklyGrowthRate;
+  }
+  if (isFiniteNumber(options.grossMargin)) {
+    normalized.grossMargin = options.grossMargin;
+  }
+  if (isFiniteNumber(options.weeklyFixedExpenses)) {
+    normalized.weeklyFixedExpenses = options.weeklyFixedExpenses;
+  }
+  if (isFiniteNumber(options.yearsMin)) {
+    normalized.yearsMin = options.yearsMin;
+  }
+  if (isFiniteNumber(options.yearsMax)) {
+    normalized.yearsMax = options.yearsMax;
+  }
 
   return normalized;
 }
@@ -66,13 +76,15 @@ export function readGrowthOptionsFromElement(el: Element): GrowthCalculatorOptio
     grossMargin: parseOptionalNumber(readDataValue(el, 'data-ims-gross-margin')),
     weeklyFixedExpenses: parseOptionalNumber(readDataValue(el, 'data-ims-weekly-fixed-expenses')),
     yearsMin: parseOptionalNumber(readDataValue(el, 'data-ims-years-min')),
-    yearsMax: parseOptionalNumber(readDataValue(el, 'data-ims-years-max'))
+    yearsMax: parseOptionalNumber(readDataValue(el, 'data-ims-years-max')),
   };
 
   return normalizeGrowthOptions(options);
 }
 
-export function defaultedGrowthOptions(options: GrowthCalculatorOptions | undefined): GrowthCalculatorOptions {
+export function defaultedGrowthOptions(
+  options: GrowthCalculatorOptions | undefined
+): GrowthCalculatorOptions {
   const normalized = normalizeGrowthOptions(options);
 
   return {
@@ -83,6 +95,6 @@ export function defaultedGrowthOptions(options: GrowthCalculatorOptions | undefi
     grossMargin: normalized.grossMargin ?? DEFAULT_GROWTH_STATE.grossMargin,
     weeklyFixedExpenses: normalized.weeklyFixedExpenses ?? DEFAULT_GROWTH_STATE.weeklyFixedExpenses,
     yearsMin: normalized.yearsMin ?? DEFAULT_GROWTH_STATE.yearsMin,
-    yearsMax: normalized.yearsMax ?? DEFAULT_GROWTH_STATE.yearsMax
+    yearsMax: normalized.yearsMax ?? DEFAULT_GROWTH_STATE.yearsMax,
   };
 }
