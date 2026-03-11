@@ -1,14 +1,14 @@
-name: Package Pages Release
+name: Package Single Widget Release
 
 on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Release tag (defaults to pages-<short-sha>)
+        description: Release tag (defaults to single-widget-<short-sha>)
         required: false
         type: string
       release_name:
-        description: Release title (defaults to Pages Package <short-sha>)
+        description: Release title (defaults to Single Widget Package <short-sha>)
         required: false
         type: string
       make_latest:
@@ -54,7 +54,7 @@ jobs:
           echo "target_sha=$TARGET_SHA" >> "$GITHUB_OUTPUT"
 
   package:
-    name: Build and Publish Pages Package
+    name: Build and Publish Single Widget Package
     runs-on: ubuntu-latest
     needs:
       - resolve-target
@@ -86,15 +86,35 @@ jobs:
 
           TARGET_SHA="${{ needs.resolve-target.outputs.target_sha }}"
           SHORT_SHA="$(echo "$TARGET_SHA" | cut -c1-12)"
+          PACKAGE_DIR="release-single-widget"
 
-          if [ ! -d "dist/pages" ]; then
-            echo "dist/pages is missing after build"
+          if [ ! -f "dist/webflow-growth-calculator.js" ]; then
+            echo "dist/webflow-growth-calculator.js is missing after build"
             exit 1
           fi
 
-          ARCHIVE_NAME="ims-graph-pages-${TARGET_SHA}.zip"
+          rm -rf "$PACKAGE_DIR"
+          mkdir -p "$PACKAGE_DIR"
+
+          cp "dist/webflow-growth-calculator.js" "$PACKAGE_DIR/webflow-growth-calculator.js"
+          cp "templates/codepen-shell.html" "$PACKAGE_DIR/index.html"
+
+          sed -i 's#</body>#  <script src="./webflow-growth-calculator.js"></script>\n  <script>\n    if (window.ImsGrowthCalculator && typeof window.ImsGrowthCalculator.autoInit === "function") {\n      window.ImsGrowthCalculator.autoInit();\n    }\n  </script>\n</body>#' "$PACKAGE_DIR/index.html"
+
+          if ! grep -q 'webflow-growth-calculator.js' "$PACKAGE_DIR/index.html"; then
+            echo "index.html generation failed to include widget script"
+            exit 1
+          fi
+
+          FILE_COUNT="$(find "$PACKAGE_DIR" -maxdepth 1 -type f | wc -l | tr -d ' ')"
+          if [ "$FILE_COUNT" -ne 2 ]; then
+            echo "Package directory must contain exactly 2 files, found $FILE_COUNT"
+            exit 1
+          fi
+
+          ARCHIVE_NAME="ims-graph-single-widget-${TARGET_SHA}.zip"
           rm -f "$ARCHIVE_NAME"
-          zip -r "$ARCHIVE_NAME" dist/pages
+          zip -j "$ARCHIVE_NAME" "$PACKAGE_DIR/index.html" "$PACKAGE_DIR/webflow-growth-calculator.js"
 
           INPUT_TAG="${{ github.event.inputs.tag }}"
           INPUT_RELEASE_NAME="${{ github.event.inputs.release_name }}"
@@ -103,13 +123,13 @@ jobs:
           if [ -n "$INPUT_TAG" ]; then
             RELEASE_TAG="$INPUT_TAG"
           else
-            RELEASE_TAG="pages-${SHORT_SHA}"
+            RELEASE_TAG="single-widget-${SHORT_SHA}"
           fi
 
           if [ -n "$INPUT_RELEASE_NAME" ]; then
             RELEASE_NAME="$INPUT_RELEASE_NAME"
           else
-            RELEASE_NAME="Pages Package ${SHORT_SHA}"
+            RELEASE_NAME="Single Widget Package ${SHORT_SHA}"
           fi
 
           if [ "$INPUT_MAKE_LATEST" = "true" ]; then
@@ -132,7 +152,11 @@ jobs:
         run: |
           set -euo pipefail
           cat > release-notes.md <<EOF
-          This release asset contains the built \`dist/pages\` package for handoff.
+          This release asset contains the minimal single-widget handoff package (no source code).
+
+          Package contents:
+          - \`index.html\` (template-based shell with widget mount + auto-init)
+          - \`webflow-growth-calculator.js\` (from \`dist/webflow-growth-calculator.js\`)
 
           - Commit SHA: \`${{ steps.package.outputs.target_sha }}\`
           - Asset: \`${{ steps.package.outputs.archive_name }}\`
