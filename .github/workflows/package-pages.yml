@@ -1,0 +1,152 @@
+name: Package Pages Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag (defaults to pages-<short-sha>)
+        required: false
+        type: string
+      release_name:
+        description: Release title (defaults to Pages Package <short-sha>)
+        required: false
+        type: string
+      make_latest:
+        description: Mark this release as latest
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: package-pages-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  resolve-target:
+    name: Resolve Tested Target SHA
+    runs-on: ubuntu-latest
+    outputs:
+      target_sha: ${{ steps.target.outputs.target_sha }}
+    steps:
+      - id: target
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          RUNS_URL="https://api.github.com/repos/${{ github.repository }}/actions/workflows/ci.yml/runs?branch=master&event=push&status=completed&per_page=50"
+          RUNS_JSON="$(curl -fsSL -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" "$RUNS_URL")"
+          TARGET_SHA="$(echo "$RUNS_JSON" | jq -r '.workflow_runs[] | select(.conclusion=="success") | .head_sha' | head -n 1)"
+
+          if [ -z "$TARGET_SHA" ] || [ "$TARGET_SHA" = "null" ]; then
+            echo "No successful CI push run found on master; refusing package release."
+            exit 1
+          fi
+
+          echo "target_sha=$TARGET_SHA" >> "$GITHUB_OUTPUT"
+
+  package:
+    name: Build and Publish Pages Package
+    runs-on: ubuntu-latest
+    needs:
+      - resolve-target
+    if: needs.resolve-target.outputs.target_sha != ''
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.resolve-target.outputs.target_sha }}
+
+      - name: Install Bun
+        run: |
+          curl -fsSL https://bun.sh/install | bash
+          echo "$HOME/.bun/bin" >> "$GITHUB_PATH"
+
+      - name: Check Bun
+        run: bun --version
+
+      - name: Install Dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build
+        run: bun run build
+
+      - name: Prepare Package
+        id: package
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          TARGET_SHA="${{ needs.resolve-target.outputs.target_sha }}"
+          SHORT_SHA="$(echo "$TARGET_SHA" | cut -c1-12)"
+
+          if [ ! -d "dist/pages" ]; then
+            echo "dist/pages is missing after build"
+            exit 1
+          fi
+
+          ARCHIVE_NAME="ims-graph-pages-${TARGET_SHA}.zip"
+          rm -f "$ARCHIVE_NAME"
+          zip -r "$ARCHIVE_NAME" dist/pages
+
+          INPUT_TAG="${{ github.event.inputs.tag }}"
+          INPUT_RELEASE_NAME="${{ github.event.inputs.release_name }}"
+          INPUT_MAKE_LATEST="${{ github.event.inputs.make_latest }}"
+
+          if [ -n "$INPUT_TAG" ]; then
+            RELEASE_TAG="$INPUT_TAG"
+          else
+            RELEASE_TAG="pages-${SHORT_SHA}"
+          fi
+
+          if [ -n "$INPUT_RELEASE_NAME" ]; then
+            RELEASE_NAME="$INPUT_RELEASE_NAME"
+          else
+            RELEASE_NAME="Pages Package ${SHORT_SHA}"
+          fi
+
+          if [ "$INPUT_MAKE_LATEST" = "true" ]; then
+            MAKE_LATEST="true"
+          else
+            MAKE_LATEST="false"
+          fi
+
+          {
+            echo "target_sha=$TARGET_SHA"
+            echo "archive_name=$ARCHIVE_NAME"
+            echo "release_tag=$RELEASE_TAG"
+            echo "release_name=$RELEASE_NAME"
+            echo "make_latest=$MAKE_LATEST"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Write Release Notes
+        id: notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > release-notes.md <<EOF
+          This release asset contains the built \`dist/pages\` package for handoff.
+
+          - Commit SHA: \`${{ steps.package.outputs.target_sha }}\`
+          - Asset: \`${{ steps.package.outputs.archive_name }}\`
+          - Workflow Run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          - Triggered By: \`${{ github.actor }}\`
+          EOF
+
+      - name: Create Release and Upload Asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.package.outputs.release_tag }}
+          target_commitish: ${{ steps.package.outputs.target_sha }}
+          name: ${{ steps.package.outputs.release_name }}
+          body_path: release-notes.md
+          files: ${{ steps.package.outputs.archive_name }}
+          fail_on_unmatched_files: true
+          make_latest: ${{ steps.package.outputs.make_latest }}
