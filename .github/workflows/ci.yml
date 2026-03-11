@@ -7,6 +7,9 @@ on:
   push:
     branches:
       - master
+    paths-ignore:
+      - documentation/**
+      - '**/*.md'
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}

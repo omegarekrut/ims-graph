@@ -9,6 +9,11 @@ import type {
   SceneId,
 } from '../core/contracts';
 import { defaultedGrowthOptions, normalizeGrowthOptions } from '../core/options';
+import {
+  mergeGrowthOptionsWithSnapshot,
+  readCanonicalGrowthSnapshotFromLegacyInstance,
+} from './lead/growth-snapshot';
+import { getPageLeadGateController } from './lead/lead-gate';
 
 export interface MountGrowthWidgetArgs {
   graphId: GraphId;
@@ -22,14 +27,31 @@ export interface MountGrowthWidgetArgs {
 }
 
 export function mountGrowthWidget(args: MountGrowthWidgetArgs): GraphInstance {
+  const leadGateController = getPageLeadGateController();
+  leadGateController?.registerCalculatorMount(args.mount, args.graphId);
+
   const normalizedOptions = normalizeGrowthOptions(args.options);
-  const legacyInstance = args.legacyApi ? args.legacyApi.init(args.mount, normalizedOptions) : null;
+  const restoreCandidate = leadGateController?.readSnapshotRestoreCandidateForMount(args.mount);
+  const restoredSnapshot = restoreCandidate?.snapshot || null;
+  const mountOptions = mergeGrowthOptionsWithSnapshot(normalizedOptions, restoredSnapshot);
+  const legacyInstance = args.legacyApi ? args.legacyApi.init(args.mount, mountOptions) : null;
+  if (legacyInstance !== null) {
+    restoreCandidate?.commit();
+  }
+  const canonicalSnapshot = readCanonicalGrowthSnapshotFromLegacyInstance(legacyInstance);
+
+  if (canonicalSnapshot) {
+    leadGateController?.writeSnapshotForMount(args.mount, canonicalSnapshot);
+  }
+  if (legacyInstance !== null) {
+    leadGateController?.registerCalculatorInstance(args.mount, legacyInstance);
+  }
 
   return {
     graphId: args.graphId,
     kind: 'growth-calculator',
     mount: args.mount,
-    options: defaultedGrowthOptions(normalizedOptions),
+    options: defaultedGrowthOptions(canonicalSnapshot || mountOptions),
     legacyInstance,
     inputs: args.inputs || [],
     outputs: args.outputs || [],

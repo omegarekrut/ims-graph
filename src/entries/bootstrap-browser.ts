@@ -1,5 +1,5 @@
 import type { ImsGrowthCalculatorPublicApi } from '../core/contracts';
-import { getLegacyApi } from '../widgets/legacy-api';
+import { getLegacyApi } from '../widgets/legacy/legacy-api';
 import { autoInitEmbed, publicApi, setRuntimeLegacyApi } from './embed';
 
 export interface BrowserBootstrapOptions {
