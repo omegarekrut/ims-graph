@@ -5,7 +5,7 @@ on:
     branches:
       - master
     paths:
-      - templates/codepen/**
+      - templates/codepen/single/**
       - scripts/render-codepen.ts
       - scripts/codepen-sync.ts
       - .github/workflows/codepen-sync.yml

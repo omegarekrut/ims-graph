@@ -17,6 +17,7 @@
     "test": "bun run test:unit && bun run test:e2e"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.4.6",
     "@playwright/test": "^1.54.2",
     "@types/node": "^24.3.0",
     "jsdom": "^26.1.0",

@@ -7,6 +7,7 @@ interface CodepenShellAssets {
   html: string;
   css: string;
   js: string;
+  expectedJsExternal: string[];
 }
 
 interface StorageCookie {
@@ -202,16 +203,16 @@ function resolveStorageState(): StorageStateLike {
   const cookiesJson = normalizeEnv(process.env.CODEPEN_COOKIES_JSON);
   if (cookiesJson) {
     const parsed = safeJsonParse<unknown>(cookiesJson, 'CODEPEN_COOKIES_JSON');
-    if (Array.isArray(parsed)) {
-      const cookies = parsed
-        .map((cookie) => toStorageCookie(cookie))
-        .filter((cookie): cookie is StorageCookie => cookie !== null);
-      return {
-        cookies,
-        origins: []
-      };
+    if (!Array.isArray(parsed)) {
+      return toStorageStateLike(parsed);
     }
-    return toStorageStateLike(parsed);
+    const cookies = parsed
+      .map((cookie) => toStorageCookie(cookie))
+      .filter((cookie): cookie is StorageCookie => cookie !== null);
+    return {
+      cookies,
+      origins: []
+    };
   }
 
   const sessionCookie = normalizeEnv(process.env.CODEPEN_SESSION_COOKIE);
@@ -244,19 +245,72 @@ function resolveDistPrefix(): string {
   return normalizeEnv(process.env.CODEPEN_DIST_PREFIX) || DEFAULT_DIST_PREFIX;
 }
 
+function resolvePrefillFileName(distPrefix: string): string {
+  const explicitPrefill = normalizeEnv(process.env.CODEPEN_PREFILL_FILE);
+  if (explicitPrefill) {
+    return explicitPrefill;
+  }
+  if (distPrefix === 'pen') {
+    return 'prefill.json';
+  }
+  if (distPrefix === 'scene-pen') {
+    return 'scene-prefill.json';
+  }
+  return `${distPrefix}.json`;
+}
+
+function splitExternalUrls(value: string): string[] {
+  return value
+    .split(/[;\n,]/g)
+    .map((entry) => entry.trim())
+    .filter((entry) => entry !== '');
+}
+
+function uniqueSorted(values: string[]): string[] {
+  return Array.from(new Set(values)).sort((left, right) => left.localeCompare(right));
+}
+
+function toExpectedJsExternalList(prefillRaw: string, prefillName: string): string[] {
+  const parsed = safeJsonParse<{ js_external?: unknown }>(prefillRaw, prefillName);
+  const jsExternal = typeof parsed.js_external === 'string' ? parsed.js_external : '';
+  const expected = splitExternalUrls(jsExternal);
+  if (expected.length > 0) {
+    return uniqueSorted(expected);
+  }
+  throw new Error(`Missing js_external in dist/codepen/${prefillName}.`);
+}
+
+function parseJsExternalMatches(pageContent: string): string[] {
+  const pattern = /"js_external"\s*:\s*"((?:\\.|[^"\\])*)"/g;
+  const found: string[] = [];
+
+  for (const match of pageContent.matchAll(pattern)) {
+    const encoded = match[1];
+    const decoded = safeJsonParse<string>(`"${encoded}"`, 'CodePen page js_external');
+    const urls = splitExternalUrls(decoded);
+    found.push(...urls);
+  }
+
+  return uniqueSorted(found);
+}
+
 async function readCodepenAssets(distPrefix: string): Promise<CodepenShellAssets> {
   const distCodepenDir = resolve(ROOT_DIR, 'dist/codepen');
   const htmlPath = resolve(distCodepenDir, `${distPrefix}.html`);
   const cssPath = resolve(distCodepenDir, `${distPrefix}.css`);
   const jsPath = resolve(distCodepenDir, `${distPrefix}.js`);
+  const prefillPath = resolve(distCodepenDir, resolvePrefillFileName(distPrefix));
 
-  const [html, css, js] = await Promise.all([
+  const [html, css, js, prefillRaw] = await Promise.all([
     readFile(htmlPath, 'utf8'),
     readFile(cssPath, 'utf8'),
-    readFile(jsPath, 'utf8')
+    readFile(jsPath, 'utf8'),
+    readFile(prefillPath, 'utf8')
   ]);
+  const prefillName = resolvePrefillFileName(distPrefix);
+  const expectedJsExternal = toExpectedJsExternalList(prefillRaw, prefillName);
 
-  return { html, css, js };
+  return { html, css, js, expectedJsExternal };
 }
 
 async function clickFirstVisible(candidates: Locator[]): Promise<boolean> {
@@ -328,6 +382,29 @@ async function waitForEditorReady(page: Page): Promise<void> {
   }
 }
 
+function sameUrlSet(left: string[], right: string[]): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+  return left.every((entry, index) => entry === right[index]);
+}
+
+async function assertJsExternalMatches(page: Page, expectedJsExternal: string[]): Promise<void> {
+  const pageContent = await page.content();
+  const currentJsExternal = parseJsExternalMatches(pageContent);
+  if (currentJsExternal.length === 0) {
+    throw new Error('Could not read current CodePen js_external list from editor page.');
+  }
+
+  if (sameUrlSet(currentJsExternal, expectedJsExternal)) {
+    return;
+  }
+
+  throw new Error(
+    `CodePen js_external mismatch.\nExpected: ${expectedJsExternal.join(', ')}\nCurrent: ${currentJsExternal.join(', ')}`
+  );
+}
+
 async function triggerSave(page: Page): Promise<void> {
   const modifier = process.platform === 'darwin' ? 'Meta' : 'Control';
   const responsePromise = page
@@ -383,6 +460,7 @@ async function main(): Promise<void> {
   try {
     await page.goto(editorUrl, { waitUntil: 'domcontentloaded' });
     await waitForEditorReady(page);
+    await assertJsExternalMatches(page, assets.expectedJsExternal);
     await setPanelContent(page, 'HTML', assets.html);
     await setPanelContent(page, 'CSS', assets.css);
     await setPanelContent(page, 'JS', assets.js);
