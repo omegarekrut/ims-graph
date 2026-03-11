@@ -1,0 +1,48 @@
+name: CodePen Sync
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - templates/codepen/**
+      - scripts/render-codepen.ts
+      - scripts/codepen-sync.ts
+      - .github/workflows/codepen-sync.yml
+  workflow_dispatch:
+
+concurrency:
+  group: codepen-sync
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    name: Sync CodePen Shell
+    runs-on: ubuntu-latest
+    env:
+      CODEPEN_PEN_ID: xbEGZyV
+      CODEPEN_STORAGE_STATE_JSON: ${{ secrets.CODEPEN_STORAGE_STATE_JSON }}
+      CODEPEN_COOKIES_JSON: ${{ secrets.CODEPEN_COOKIES_JSON }}
+      CODEPEN_SESSION_COOKIE: ${{ secrets.CODEPEN_SESSION_COOKIE }}
+      CODEPEN_REMEMBER_USER_TOKEN: ${{ secrets.CODEPEN_REMEMBER_USER_TOKEN }}
+      CODEPEN_DIST_PREFIX: pen
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - name: Install Dependencies
+        run: bun install --frozen-lockfile
+      - name: Build CodePen Assets
+        run: bun run build:codepen
+      - name: Install Playwright Browser
+        run: bunx playwright install --with-deps chromium
+      - name: Validate CodePen Secrets
+        run: |
+          if [ -z "${CODEPEN_STORAGE_STATE_JSON}" ] && [ -z "${CODEPEN_COOKIES_JSON}" ] && [ -z "${CODEPEN_SESSION_COOKIE}" ]; then
+            echo "Missing CodePen auth secret. Set one of: CODEPEN_STORAGE_STATE_JSON, CODEPEN_COOKIES_JSON, CODEPEN_SESSION_COOKIE."
+            exit 1
+          fi
+      - name: Sync Existing Pen
+        run: bun run sync:codepen

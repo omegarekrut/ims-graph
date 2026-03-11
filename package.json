@@ -10,6 +10,7 @@
     "build:site": "vite build --mode site",
     "build:codepen": "bun run scripts/render-codepen.ts",
     "build:pages": "bun run scripts/prepare-pages.ts",
+    "sync:codepen": "bun run scripts/codepen-sync.ts",
     "typecheck": "tsc --noEmit",
     "test:unit": "vitest run",
     "test:e2e": "bunx playwright test --config=playwright.config.ts",
