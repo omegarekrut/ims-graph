@@ -25,7 +25,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: oven-sh/setup-bun@v2
+      - name: Install Bun
+        run: |
+          curl -fsSL https://bun.sh/install | bash
+          echo "$HOME/.bun/bin" >> "$GITHUB_PATH"
+      - name: Check Bun
+        run: bun --version
       - name: Install Dependencies
         run: bun install --frozen-lockfile
       - name: Typecheck
@@ -49,7 +54,12 @@ jobs:
       IMS_BUILD_ID: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v6
-      - uses: oven-sh/setup-bun@v2
+      - name: Install Bun
+        run: |
+          curl -fsSL https://bun.sh/install | bash
+          echo "$HOME/.bun/bin" >> "$GITHUB_PATH"
+      - name: Check Bun
+        run: bun --version
       - name: Install Dependencies
         run: bun install --frozen-lockfile
       - name: Build
