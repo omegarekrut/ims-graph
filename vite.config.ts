@@ -3,12 +3,18 @@ import { defineConfig, type UserConfig } from 'vite';
 
 const HTML_INPUTS = {
   index: resolve(__dirname, 'index.html'),
-  previewShell: resolve(__dirname, 'preview-shell.html'),
-  codepenShell: resolve(__dirname, 'codepen-shell.html')
+  previewShell: resolve(__dirname, 'preview-shell.html')
 };
 
-const ENTRY_POINTS = {
-  embed: resolve(__dirname, 'src/entries/site.ts')
+const WIDGET_ENTRIES = {
+  singleGraph: resolve(__dirname, 'src/entries/single-graph.ts'),
+  sceneRuntime: resolve(__dirname, 'src/entries/scene-runtime.ts')
+};
+
+const WIDGET_OUTPUT_FILES = {
+  embed: 'ims-growth-calculator.iife.js',
+  scene: 'scene-runtime.iife.js',
+  legacy: 'webflow-growth-calculator.js'
 };
 
 function createSiteConfig(): UserConfig {
@@ -30,30 +36,24 @@ function createSiteConfig(): UserConfig {
   };
 }
 
-function createWidgetConfig(): UserConfig {
+function createWidgetConfig(
+  entry: string,
+  fileName: string,
+  globalName: string
+): UserConfig {
   return {
     build: {
-      outDir: 'dist/widget',
-      emptyOutDir: true,
+      outDir: 'dist',
+      emptyOutDir: false,
       lib: {
-        entry: ENTRY_POINTS.embed,
-        name: 'ImsGrowthEmbed',
-        formats: ['es', 'iife'],
-        fileName: (format) => (format === 'iife' ? 'webflow-growth-calculator.js' : 'embed.js')
-      }
-    }
-  };
-}
-
-function createCodepenConfig(): UserConfig {
-  return {
-    base: './',
-    build: {
-      outDir: 'dist/codepen',
-      emptyOutDir: true,
+        entry,
+        name: globalName,
+        formats: ['iife'],
+        fileName: () => fileName
+      },
       rollupOptions: {
-        input: {
-          'codepen-shell': HTML_INPUTS.codepenShell
+        output: {
+          extend: true
         }
       }
     }
@@ -61,11 +61,19 @@ function createCodepenConfig(): UserConfig {
 }
 
 export default defineConfig(({ mode }) => {
-  if (mode === 'widget') {
-    return createWidgetConfig();
+  if (mode === 'widget-single') {
+    return createWidgetConfig(
+      WIDGET_ENTRIES.singleGraph,
+      WIDGET_OUTPUT_FILES.embed,
+      'ImsGrowthCalculatorWidgetRuntime'
+    );
   }
-  if (mode === 'codepen') {
-    return createCodepenConfig();
+  if (mode === 'widget-scene') {
+    return createWidgetConfig(
+      WIDGET_ENTRIES.sceneRuntime,
+      WIDGET_OUTPUT_FILES.scene,
+      'ImsGrowthCalculatorSceneRuntime'
+    );
   }
   return createSiteConfig();
 });

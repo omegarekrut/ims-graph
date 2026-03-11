@@ -29,7 +29,7 @@ describe('phase 2/3 runtime contracts', () => {
     expect(html).toContain('id="ims-growth-calc"');
     expect(html).toContain('src="./src/entries/site.ts"');
     expect(indexHtml).toContain('href="./preview-shell.html"');
-    expect(codepenShellHtml).toContain('src="./src/entries/codepen.ts"');
+    expect(codepenShellHtml).toContain('src="./src/entries/single-graph.ts"');
     expect(viteConfig).toContain('webflow-growth-calculator.js');
   });
 
@@ -102,17 +102,17 @@ describe('phase 2/3 runtime contracts', () => {
     document.body.innerHTML = '';
   });
 
-  it('codepen entry installs browser runtime and re-exports APIs', async () => {
-    const codepenEntry = await import('../../src/entries/codepen');
+  it('scene-runtime entry installs browser runtime and re-exports APIs', async () => {
+    const sceneRuntimeEntry = await import('../../src/entries/scene-runtime');
 
-    expect(typeof codepenEntry.initEmbed).toBe('function');
-    expect(typeof codepenEntry.autoInitEmbed).toBe('function');
-    expect(typeof codepenEntry.initScene).toBe('function');
-    expect(typeof codepenEntry.autoInitScene).toBe('function');
-    expect(typeof codepenEntry.initSceneEmbed).toBe('function');
-    expect(typeof codepenEntry.autoInitSceneEmbed).toBe('function');
-    expect(typeof codepenEntry.loadLegacyRuntime).toBe('function');
-    expect(typeof codepenEntry.installBrowserRuntime).toBe('function');
+    expect(typeof sceneRuntimeEntry.initEmbed).toBe('function');
+    expect(typeof sceneRuntimeEntry.autoInitEmbed).toBe('function');
+    expect(typeof sceneRuntimeEntry.initScene).toBe('function');
+    expect(typeof sceneRuntimeEntry.autoInitScene).toBe('function');
+    expect(typeof sceneRuntimeEntry.initSceneEmbed).toBe('function');
+    expect(typeof sceneRuntimeEntry.autoInitSceneEmbed).toBe('function');
+    expect(typeof sceneRuntimeEntry.loadLegacyRuntime).toBe('function');
+    expect(typeof sceneRuntimeEntry.installBrowserRuntime).toBe('function');
     expect(window.ImsGrowthCalculator).toBe(publicApi);
   });
 });
