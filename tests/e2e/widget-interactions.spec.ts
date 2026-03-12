@@ -1,3 +1,4 @@
+import type { Locator } from '@playwright/test';
 import { expect, test } from '@playwright/test';
 
 import { dragHandle } from './helpers/drag';
@@ -7,6 +8,49 @@ import {
   widgetInput,
   widgetSummary,
 } from './helpers/widget';
+
+async function readRevenueGeometry(mount: Locator): Promise<{
+  pointCount: number;
+  uniqueYCount: number;
+}> {
+  const revenueLine = mount.locator('svg polyline[stroke="#63C56B"]').first();
+  await expect(revenueLine).toBeVisible();
+  return revenueLine.evaluate((node) => {
+    const points = (node.getAttribute('points') || '').trim();
+    const yValues = points
+      .split(/\s+/)
+      .map((point) => point.split(','))
+      .map((pair) => Number.parseFloat(pair[1] ?? ''))
+      .filter((value) => Number.isFinite(value));
+
+    return {
+      pointCount: yValues.length,
+      uniqueYCount: new Set(yValues.map((y) => y.toFixed(4))).size,
+    };
+  });
+}
+
+async function readVariableBarGeometry(mount: Locator): Promise<{
+  barCount: number;
+  hasVisibleBars: boolean;
+}> {
+  return mount
+    .locator('svg')
+    .first()
+    .evaluate((svg) => {
+      const variableRects = Array.from(
+        svg.querySelectorAll('rect[fill="#E6A7BC"]')
+      ) as SVGRectElement[];
+      const heights = variableRects
+        .map((rect) => Number.parseFloat(rect.getAttribute('height') || '0'))
+        .filter((value) => Number.isFinite(value));
+
+      return {
+        barCount: variableRects.length,
+        hasVisibleBars: heights.some((value) => value > 0.1),
+      };
+    });
+}
 
 test.describe('widget interactions', () => {
   test.beforeEach(async ({ page }) => {
@@ -90,5 +134,31 @@ test.describe('widget interactions', () => {
         .filter({ hasText: /^Revenue \$/ })
         .first()
     ).toBeVisible();
+  });
+
+  test('low-revenue flow keeps non-zero chart geometry in bars and lines modes', async ({
+    page,
+  }) => {
+    const mount = await waitForWidgetMount(page, 'preview-growth');
+
+    await mount.locator('input[data-group="units"][value="year"]').check();
+    await fillAndApplyInput(mount, 'revenue', '$999', 'blur');
+    await fillAndApplyInput(mount, 'growth', '12%', 'blur');
+    await fillAndApplyInput(mount, 'grossMargin', '10%', 'blur');
+    await fillAndApplyInput(mount, 'fixed', '$300', 'blur');
+
+    await mount.locator('input[data-group="expenseViz"][value="bars"]').check();
+    const barsRevenueGeometry = await readRevenueGeometry(mount);
+    expect(barsRevenueGeometry.pointCount).toBeGreaterThan(2);
+    expect(barsRevenueGeometry.uniqueYCount).toBeGreaterThan(1);
+
+    const barsVariableGeometry = await readVariableBarGeometry(mount);
+    expect(barsVariableGeometry.barCount).toBeGreaterThan(0);
+    expect(barsVariableGeometry.hasVisibleBars).toBe(true);
+
+    await mount.locator('input[data-group="expenseViz"][value="lines"]').check();
+    const linesRevenueGeometry = await readRevenueGeometry(mount);
+    expect(linesRevenueGeometry.pointCount).toBeGreaterThan(2);
+    expect(linesRevenueGeometry.uniqueYCount).toBeGreaterThan(1);
   });
 });
