@@ -43,6 +43,7 @@
     quarter: 900,
     year: 900,
   };
+  const LOW_END_Y_MIN_HEADROOM_FACTOR = 0.85;
   const MIN_Y_TICK_GAP = 14;
   const AXIS_LABEL_TOP_CLEARANCE = 12;
   const MIN_X_YEAR_LABEL_GAP = 28;
@@ -475,6 +476,36 @@
     return 10 * scale;
   }
 
+  function snapDownOneThree(value) {
+    if (!isFiniteNumber(value) || value <= 0) {
+      return 1;
+    }
+
+    const exponent = Math.floor(Math.log10(value));
+    const scale = 10 ** exponent;
+    const normalized = value / scale;
+    if (normalized >= 3) {
+      return 3 * scale;
+    }
+    if (normalized >= 1) {
+      return scale;
+    }
+    return 3 * 10 ** (exponent - 1);
+  }
+
+  function resolveDataDrivenYMinDisplay(visibleYMinDisplay) {
+    if (!isFiniteNumber(visibleYMinDisplay) || visibleYMinDisplay <= 0) {
+      return NaN;
+    }
+
+    const withHeadroom = visibleYMinDisplay * LOW_END_Y_MIN_HEADROOM_FACTOR;
+    const snapped = snapDownOneThree(withHeadroom);
+    if (!isFiniteNumber(snapped) || snapped <= 0) {
+      return NaN;
+    }
+    return snapped;
+  }
+
   function nextOneThreeTick(tick) {
     if (!isFiniteNumber(tick) || tick <= 0) {
       return 1;
@@ -489,24 +520,53 @@
     return 10 * scale;
   }
 
-  function extendBaselineOneThreeTicks(baselineTicks, maxDisplay) {
+  function prevOneThreeTick(tick) {
+    if (!isFiniteNumber(tick) || tick <= 0) {
+      return 0.3;
+    }
+
+    const exponent = Math.floor(Math.log10(tick));
+    const scale = 10 ** exponent;
+    const normalized = tick / scale;
+    if (normalized > 3) {
+      return 3 * scale;
+    }
+    if (normalized > 1) {
+      return scale;
+    }
+    return 3 * 10 ** (exponent - 1);
+  }
+
+  function extendBaselineOneThreeTicks(baselineTicks, minDisplay, maxDisplay) {
     const ticks = (baselineTicks || [])
       .filter((tick) => isFiniteNumber(tick) && tick > 0)
       .sort((a, b) => a - b)
       .filter((tick, idx, arr) => idx === 0 || Math.abs(tick - arr[idx - 1]) > 1e-9);
 
-    const safeMax = isFiniteNumber(maxDisplay) && maxDisplay > 0 ? maxDisplay : 1;
+    const safeMin = isFiniteNumber(minDisplay) && minDisplay > 0 ? minDisplay : 1;
+    const safeMax = isFiniteNumber(maxDisplay) && maxDisplay > safeMin ? maxDisplay : safeMin * 1.2;
     if (!ticks.length) {
-      return createOneThreeTicks(1, safeMax, 8);
+      return createOneThreeTicks(safeMin, safeMax, 8);
     }
 
     const extended = ticks.slice();
     let guard = 0;
+    while (extended[0] > safeMin && guard < 64) {
+      const nextMin = prevOneThreeTick(extended[0]);
+      if (!isFiniteNumber(nextMin) || nextMin <= 0 || Math.abs(nextMin - extended[0]) <= 1e-12) {
+        break;
+      }
+      extended.unshift(nextMin);
+      guard += 1;
+    }
     while (extended[extended.length - 1] < safeMax && guard < 64) {
       extended.push(nextOneThreeTick(extended[extended.length - 1]));
       guard += 1;
     }
-    return extended;
+
+    return extended.filter(
+      (tick) => isFiniteNumber(tick) && tick > 0 && tick >= safeMin * 0.95 && tick <= safeMax * 1.05
+    );
   }
 
   /**
@@ -1238,26 +1298,38 @@
       return clamp(projectionMax, MIN_WEEKLY_LOG_FLOOR, MAX_FINITE_FLOW);
     }
 
-    _visibleYMaxWeekly() {
+    _visiblePositiveSeriesRangeWeekly() {
       const tEndRaw = this.chart.tMax - this.chart.tMin;
       const tEnd = isFiniteNumber(tEndRaw) && tEndRaw > 0 ? tEndRaw : 0;
-      let maxCandidate =
-        isFiniteNumber(this.state.weeklyFixedExpenses) && this.state.weeklyFixedExpenses > 0
-          ? this.state.weeklyFixedExpenses
-          : 0;
+      let minCandidate = Infinity;
+      let maxCandidate = 0;
+
+      function observePositive(value) {
+        if (!isFiniteNumber(value) || value <= 0) {
+          return;
+        }
+        minCandidate = Math.min(minCandidate, value);
+        maxCandidate = Math.max(maxCandidate, value);
+      }
+
+      observePositive(this.state.weeklyFixedExpenses);
       const sampleSegments = this._totalLineSegments();
       for (let i = 0; i <= sampleSegments; i += 1) {
         const t = (i / sampleSegments) * tEnd;
-        const samples = [this._revenueAt(t), this._variableAt(t), this._totalAt(t)];
-        maxCandidate = samples.reduce((maxValue, value) => {
-          if (!isFiniteNumber(value) || value <= 0) {
-            return maxValue;
-          }
-          return Math.max(maxValue, value);
-        }, maxCandidate);
+        observePositive(this._revenueAt(t));
+        observePositive(this._variableAt(t));
+        observePositive(this._totalAt(t));
       }
-      const safeCandidate = maxCandidate > 0 ? maxCandidate : MIN_WEEKLY_LOG_FLOOR;
-      return this._clampForProjection(safeCandidate);
+
+      const safeMin =
+        isFiniteNumber(minCandidate) && minCandidate > 0 ? minCandidate : MIN_WEEKLY_LOG_FLOOR;
+      const safeMax =
+        isFiniteNumber(maxCandidate) && maxCandidate > 0 ? maxCandidate : MIN_WEEKLY_LOG_FLOOR;
+
+      return {
+        min: this._clampForProjection(Math.max(MIN_WEEKLY_LOG_FLOOR, safeMin)),
+        max: this._clampForProjection(Math.max(MIN_WEEKLY_LOG_FLOOR, safeMax)),
+      };
     }
 
     _tEndWeeks() {
@@ -1408,6 +1480,7 @@
     _domainTicksWeekly(displayUnit, baselineDisplayTicks, normalizedDomain) {
       const ticksDisplay = extendBaselineOneThreeTicks(
         baselineDisplayTicks,
+        normalizedDomain.yMinDisplay,
         normalizedDomain.yMaxDisplay
       );
       const ticksWeekly = ticksDisplay
@@ -1582,12 +1655,30 @@
 
       const displayUnit = this.state.units;
       const baselineDisplayTicks = Y_TICKS_BY_UNIT[displayUnit] || Y_TICKS_BY_UNIT.year || [];
-      const yMinDisplay = MIN_DISPLAY_Y_FLOOR_BY_UNIT[displayUnit] || 1;
-      const yMaxDisplayRaw = flowFromWeekly(this._visibleYMaxWeekly(), displayUnit);
+      const yMinDisplayUnitFloor = MIN_DISPLAY_Y_FLOOR_BY_UNIT[displayUnit] || 1;
+      const yMinDisplayProjectionFloor = flowFromWeekly(MIN_WEEKLY_LOG_FLOOR, displayUnit);
+      const visibleRangeWeekly = this._visiblePositiveSeriesRangeWeekly();
+      const visibleYMinDisplay = flowFromWeekly(visibleRangeWeekly.min, displayUnit);
+      const shouldLowerYMinFloor =
+        isFiniteNumber(visibleYMinDisplay) &&
+        visibleYMinDisplay > 0 &&
+        visibleYMinDisplay < yMinDisplayUnitFloor;
+
+      let yMinDisplay = yMinDisplayUnitFloor;
+      if (shouldLowerYMinFloor) {
+        const dataDrivenYMinDisplayRaw = resolveDataDrivenYMinDisplay(visibleYMinDisplay);
+        const dataDrivenYMinDisplay =
+          isFiniteNumber(dataDrivenYMinDisplayRaw) && dataDrivenYMinDisplayRaw > 0
+            ? Math.max(yMinDisplayProjectionFloor, dataDrivenYMinDisplayRaw)
+            : yMinDisplayUnitFloor;
+        yMinDisplay = Math.min(yMinDisplayUnitFloor, dataDrivenYMinDisplay);
+      }
+
+      const yMaxDisplayRaw = flowFromWeekly(visibleRangeWeekly.max, displayUnit);
       const yMaxDisplayHeadroom =
         isFiniteNumber(yMaxDisplayRaw) && yMaxDisplayRaw > 0
           ? yMaxDisplayRaw * 1.15
-          : yMinDisplay * 1.2;
+          : yMinDisplayUnitFloor * 1.2;
       const yMaxDisplaySnapped = snapUpOneThree(yMaxDisplayHeadroom);
       const yMaxDisplay = Math.max(yMinDisplay * 1.2, yMaxDisplaySnapped);
       const normalizedDomain = this._applyChartDomain(displayUnit, yMinDisplay, yMaxDisplay);

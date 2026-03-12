@@ -31,6 +31,8 @@ interface LegacyState {
 }
 
 interface LegacyChart {
+  height: number;
+  paddingBottom: number;
   yMin: number;
   yMax: number;
   ticksY: number[];
@@ -70,6 +72,74 @@ function createMount(id: string): HTMLDivElement {
 
 function dispatchBlur(input: HTMLInputElement): void {
   input.dispatchEvent(new Event('blur', { bubbles: true }));
+}
+
+function parsePolylineYValues(points: string): number[] {
+  return points
+    .trim()
+    .split(/\s+/)
+    .map((point) => point.split(','))
+    .map((pair) => Number.parseFloat(pair[1] ?? ''))
+    .filter((value) => Number.isFinite(value));
+}
+
+function uniqueRoundedCount(values: number[], digits = 4): number {
+  return new Set(values.map((value) => value.toFixed(digits))).size;
+}
+
+const TEST_WEEKS_PER_YEAR = 52.1775;
+const TEST_WEEKS_PER_QUARTER = TEST_WEEKS_PER_YEAR / 4;
+const TEST_WEEKS_PER_MONTH = TEST_WEEKS_PER_YEAR / 12;
+
+function testUnitWeeks(units: string): number {
+  if (units === 'week') {
+    return 1;
+  }
+  if (units === 'month') {
+    return TEST_WEEKS_PER_MONTH;
+  }
+  if (units === 'quarter') {
+    return TEST_WEEKS_PER_QUARTER;
+  }
+  return TEST_WEEKS_PER_YEAR;
+}
+
+function toDisplayFromWeekly(value: number, units: string): number {
+  return value * testUnitWeeks(units);
+}
+
+function toWeeklyFromDisplay(value: number, units: string): number {
+  return value / testUnitWeeks(units);
+}
+
+const YEAR_BARS_LOW_REVENUE_OPTIONS = {
+  units: 'year',
+  expenseViz: 'bars',
+  grossMargin: 0.1,
+  weeklyFixedExpenses: 0,
+  yearsMin: 1,
+  yearsMax: 9,
+} as const;
+
+function createYearBarsLowRevenueInstance(
+  api: LegacyApi,
+  mountId: string
+): {
+  mount: HTMLDivElement;
+  instance: LegacyInstance | null;
+} {
+  const mount = createMount(mountId);
+  return {
+    mount: mount,
+    instance: api.init(mount, YEAR_BARS_LOW_REVENUE_OPTIONS),
+  };
+}
+
+function applyLowRevenueGrowthAndMarginInputs(instance: LegacyInstance): void {
+  instance.nodes.inputGrossMargin.value = '10%';
+  dispatchBlur(instance.nodes.inputGrossMargin);
+  instance.nodes.inputGrowth.value = '12%';
+  dispatchBlur(instance.nodes.inputGrowth);
 }
 
 beforeAll(async () => {
@@ -221,5 +291,184 @@ describe('legacy calculator golden behavior', () => {
         expect(tick).toBeGreaterThan(instance.chart.ticksY[index - 1] as number);
       }
     });
+  });
+
+  it('keeps yearly 1000 at the unit floor and lowers it for yearly 999 via input apply', () => {
+    const api = getLegacyApi();
+    const { instance } = createYearBarsLowRevenueInstance(
+      api,
+      'ims-growth-calc-year-floor-threshold'
+    );
+    expect(instance).not.toBeNull();
+    if (!instance) {
+      return;
+    }
+
+    applyLowRevenueGrowthAndMarginInputs(instance);
+    instance.nodes.inputFixed.value = '$0';
+    dispatchBlur(instance.nodes.inputFixed);
+
+    instance.nodes.inputRevenue.value = '$1,000';
+    dispatchBlur(instance.nodes.inputRevenue);
+    expect(instance.chart.yMin).toBeCloseTo(toWeeklyFromDisplay(900, 'year'), 10);
+
+    instance.nodes.inputRevenue.value = '$999';
+    dispatchBlur(instance.nodes.inputRevenue);
+    expect(instance.chart.yMin).toBeLessThan(toWeeklyFromDisplay(900, 'year'));
+  });
+
+  it('covers low yearly revenue values through display-input apply and keeps chart geometry non-flat', () => {
+    const api = getLegacyApi();
+    const { mount, instance } = createYearBarsLowRevenueInstance(
+      api,
+      'ims-growth-calc-year-low-table'
+    );
+    expect(instance).not.toBeNull();
+    if (!instance) {
+      return;
+    }
+
+    applyLowRevenueGrowthAndMarginInputs(instance);
+
+    const cases = [
+      {
+        revenueDisplay: 1000,
+        fixedDisplay: 0,
+        shouldLowerFloor: false,
+        expectFixedBars: false,
+        expectBelowFloorTick: false,
+      },
+      {
+        revenueDisplay: 999,
+        fixedDisplay: 0,
+        shouldLowerFloor: true,
+        expectFixedBars: false,
+        expectBelowFloorTick: false,
+      },
+      {
+        revenueDisplay: 500,
+        fixedDisplay: 300,
+        shouldLowerFloor: true,
+        expectFixedBars: true,
+        expectBelowFloorTick: false,
+      },
+      {
+        revenueDisplay: 1,
+        fixedDisplay: 300,
+        shouldLowerFloor: true,
+        expectFixedBars: true,
+        expectBelowFloorTick: true,
+      },
+    ];
+    const unitFloorWeekly = toWeeklyFromDisplay(900, 'year');
+    const plotBottomY = instance.chart.height - instance.chart.paddingBottom;
+
+    cases.forEach(
+      ({
+        revenueDisplay,
+        fixedDisplay,
+        shouldLowerFloor,
+        expectFixedBars,
+        expectBelowFloorTick,
+      }) => {
+        instance.nodes.inputFixed.value = `$${fixedDisplay.toLocaleString('en-US')}`;
+        dispatchBlur(instance.nodes.inputFixed);
+        instance.nodes.inputRevenue.value = `$${revenueDisplay.toLocaleString('en-US')}`;
+        dispatchBlur(instance.nodes.inputRevenue);
+
+        expect(Number.isFinite(instance.chart.yMin)).toBe(true);
+        expect(Number.isFinite(instance.chart.yMax)).toBe(true);
+        expect(instance.chart.yMin).toBeGreaterThan(0);
+        expect(instance.chart.yMax).toBeGreaterThan(instance.chart.yMin);
+
+        if (shouldLowerFloor) {
+          expect(instance.chart.yMin).toBeLessThan(unitFloorWeekly);
+        } else {
+          expect(instance.chart.yMin).toBeCloseTo(unitFloorWeekly, 10);
+        }
+
+        const displayTicks = instance.chart.ticksY.map((tick) => toDisplayFromWeekly(tick, 'year'));
+        displayTicks.forEach((tick, index) => {
+          expect(tick).toBeGreaterThan(0);
+          if (index > 0) {
+            expect(tick).toBeGreaterThan(displayTicks[index - 1] as number);
+          }
+        });
+        const minDisplayTick = Math.min(...displayTicks);
+        if (shouldLowerFloor) {
+          expect(minDisplayTick).toBeLessThanOrEqual(1000);
+        }
+        if (expectBelowFloorTick) {
+          expect(displayTicks.some((tick) => tick < 900)).toBe(true);
+        }
+
+        const revenuePolyline = mount.querySelector(
+          'svg polyline[stroke="#63C56B"]'
+        ) as SVGPolylineElement | null;
+        expect(revenuePolyline).not.toBeNull();
+        if (!revenuePolyline) {
+          return;
+        }
+
+        const yValues = parsePolylineYValues(revenuePolyline.getAttribute('points') || '');
+        expect(yValues.length).toBeGreaterThan(2);
+        expect(uniqueRoundedCount(yValues)).toBeGreaterThan(1);
+        expect(yValues.every((y) => Math.abs(y - plotBottomY) < 1e-4)).toBe(false);
+
+        const variableRects = Array.from(
+          mount.querySelectorAll('svg rect[fill="#E6A7BC"]')
+        ) as SVGRectElement[];
+        expect(variableRects.length).toBeGreaterThan(0);
+        const hasVisibleVariableBar = variableRects.some((rect) => {
+          const height = Number.parseFloat(rect.getAttribute('height') || '0');
+          return Number.isFinite(height) && height > 0.1;
+        });
+        expect(hasVisibleVariableBar).toBe(true);
+
+        if (expectFixedBars) {
+          const fixedRects = Array.from(
+            mount.querySelectorAll('svg rect[fill="#D4D4DE"]')
+          ) as SVGRectElement[];
+          expect(fixedRects.length).toBeGreaterThan(0);
+          const hasVisibleFixedBar = fixedRects.some((rect) => {
+            const height = Number.parseFloat(rect.getAttribute('height') || '0');
+            return Number.isFinite(height) && height > 0.1;
+          });
+          expect(hasVisibleFixedBar).toBe(true);
+        }
+      }
+    );
+  });
+
+  it('extends low-end ticks below month floor when month domain opens downward', () => {
+    const api = getLegacyApi();
+    const mount = createMount('ims-growth-calc-month-low-ticks');
+    const instance = api.init(mount, {
+      ...YEAR_BARS_LOW_REVENUE_OPTIONS,
+      units: 'month',
+    });
+    expect(instance).not.toBeNull();
+    if (!instance) {
+      return;
+    }
+
+    applyLowRevenueGrowthAndMarginInputs(instance);
+    instance.nodes.inputFixed.value = '$0';
+    dispatchBlur(instance.nodes.inputFixed);
+    instance.nodes.inputRevenue.value = '$1';
+    dispatchBlur(instance.nodes.inputRevenue);
+
+    expect(instance.chart.yMin).toBeLessThan(toWeeklyFromDisplay(90, 'month'));
+
+    const monthDisplayTicks = instance.chart.ticksY.map((tick) =>
+      toDisplayFromWeekly(tick, 'month')
+    );
+    monthDisplayTicks.forEach((tick, index) => {
+      expect(tick).toBeGreaterThan(0);
+      if (index > 0) {
+        expect(tick).toBeGreaterThan(monthDisplayTicks[index - 1] as number);
+      }
+    });
+    expect(monthDisplayTicks.some((tick) => tick < 90)).toBe(true);
   });
 });
