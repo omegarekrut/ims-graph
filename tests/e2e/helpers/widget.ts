@@ -14,7 +14,7 @@ export function widgetInput(mount: Locator, key: WidgetInputKey): Locator {
   return mount.locator(`.igc__input[data-key="${key}"]`);
 }
 
-export function widgetSummary(mount: Locator, key: 'breakeven' | 'billion'): Locator {
+export function widgetSummary(mount: Locator, key: 'breakeven' | 'billion' | 'funding'): Locator {
   return mount.locator(`.igc__summary-value[data-key="${key}"]`);
 }
 

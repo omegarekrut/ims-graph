@@ -4,10 +4,12 @@ export interface LegacyGoldenFixture {
   metrics: {
     breakevenYears: number;
     billionYears: number;
+    fundingNeeded: number | null;
   };
   summary: {
     breakeven: string;
     billion: string;
+    funding: string;
   };
   inputs: {
     revenue: string;
@@ -29,10 +31,12 @@ export const LEGACY_GOLDEN_FIXTURES: LegacyGoldenFixture[] = [
     metrics: {
       breakevenYears: 1.531730516193526,
       billionYears: 6.719755671503592,
+      fundingNeeded: 84632.08103258976,
     },
     summary: {
       breakeven: 'year 1.5',
       billion: 'year 6.7',
+      funding: '$84.63K',
     },
     inputs: {
       revenue: '$100',
@@ -60,10 +64,12 @@ export const LEGACY_GOLDEN_FIXTURES: LegacyGoldenFixture[] = [
     metrics: {
       breakevenYears: 3.261960368113654,
       billionYears: 10.885203281324252,
+      fundingNeeded: 485747.55785867735,
     },
     summary: {
       breakeven: 'year 3.3',
       billion: 'year 11',
+      funding: '$485.7K',
     },
     inputs: {
       revenue: '$1,087',

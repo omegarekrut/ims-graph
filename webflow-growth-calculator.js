@@ -71,6 +71,7 @@
   });
   const DRAG_Y_EXPAND_TRIGGER_OFFSET = 2;
   const DRAG_Y_EXPAND_RESET_OFFSET = 16;
+  const MAX_FUNDING_INTEGRATION_SEGMENTS = 8192;
 
   // Baseline Y-axis ticks in display units.
   const Y_TICKS_BY_UNIT = {
@@ -767,7 +768,8 @@
       summary.innerHTML =
         '' +
         '<div><span class="igc__summary-label">Profitable at:</span><span class="igc__summary-value" data-key="breakeven">-</span></div>' +
-        '<div><span class="igc__summary-label">$1B/y revenue at:</span><span class="igc__summary-value" data-key="billion">-</span></div>';
+        '<div><span class="igc__summary-label">$1B/y revenue at:</span><span class="igc__summary-value" data-key="billion">-</span></div>' +
+        '<div><span class="igc__summary-label">Funding needed:</span><span class="igc__summary-value" data-key="funding">-</span></div>';
 
       // User-editable model inputs.
       const inputs = document.createElement('div');
@@ -791,6 +793,7 @@
       this.nodes.svg = svg;
       this.nodes.summaryBreakeven = summary.querySelector('[data-key="breakeven"]');
       this.nodes.summaryBillion = summary.querySelector('[data-key="billion"]');
+      this.nodes.summaryFunding = summary.querySelector('[data-key="funding"]');
       this.nodes.inputRevenue = inputs.querySelector('[data-key="revenue"]');
       this.nodes.inputGrossMargin = inputs.querySelector('[data-key="grossMargin"]');
       this.nodes.inputFixed = inputs.querySelector('[data-key="fixed"]');
@@ -1557,6 +1560,68 @@
       return this._finiteValueOrMax(variable + fixed);
     }
 
+    _weeklyOperatingBurnAt(tYearsFromStart) {
+      const revenue = this._revenueAt(tYearsFromStart);
+      if (!isFiniteNumber(revenue)) {
+        return NaN;
+      }
+
+      // Operating burn equals total expenses minus revenue, which simplifies to fixed minus contribution profit.
+      const contributionProfit = this._finiteValueOrMax(revenue * this.state.grossMargin);
+      const fixed = this._finiteValueOrMax(this.state.weeklyFixedExpenses);
+      if (!isFiniteNumber(contributionProfit) || !isFiniteNumber(fixed)) {
+        return NaN;
+      }
+
+      const burnWeekly = fixed - contributionProfit;
+      if (!isFiniteNumber(burnWeekly)) {
+        return burnWeekly > 0 ? MAX_FINITE_FLOW : 0;
+      }
+
+      return this._finiteValueOrMax(Math.max(0, burnWeekly));
+    }
+
+    _integrateFundingNeededToBreakeven(breakevenYears) {
+      if (!isFiniteNumber(breakevenYears)) {
+        return null;
+      }
+      if (breakevenYears <= 0) {
+        return 0;
+      }
+
+      const totalWeeks = breakevenYears * WEEKS_PER_YEAR;
+      if (!isFiniteNumber(totalWeeks) || totalWeeks <= 0) {
+        return 0;
+      }
+
+      const segmentCount = clamp(Math.ceil(totalWeeks), 2, MAX_FUNDING_INTEGRATION_SEGMENTS);
+      const dtYears = breakevenYears / segmentCount;
+      const dtWeeks = dtYears * WEEKS_PER_YEAR;
+
+      let fundingNeeded = 0;
+      let previousBurn = this._weeklyOperatingBurnAt(0);
+      if (!isFiniteNumber(previousBurn)) {
+        return null;
+      }
+
+      for (let index = 1; index <= segmentCount; index += 1) {
+        const tYears = dtYears * index;
+        const burn = this._weeklyOperatingBurnAt(tYears);
+        if (!isFiniteNumber(burn)) {
+          return null;
+        }
+        const segmentArea = ((previousBurn + burn) / 2) * dtWeeks;
+        fundingNeeded = this._finiteValueOrMax(fundingNeeded + segmentArea);
+        previousBurn = burn;
+      }
+
+      if (!isFiniteNumber(fundingNeeded)) {
+        return null;
+      }
+
+      return this._finiteValueOrMax(Math.max(0, fundingNeeded));
+    }
+
     /**
      * Computes key metrics: breakeven and time to $1B annual revenue.
      */
@@ -1598,9 +1663,19 @@
         billionYears = hasSolvedBillion ? solvedBillionWeeks / WEEKS_PER_YEAR : billionYears;
       }
 
+      let fundingNeeded = null;
+      if (breakevenYears === 0) {
+        fundingNeeded = 0;
+      }
+
+      if (fundingNeeded === null && isFiniteNumber(breakevenYears)) {
+        fundingNeeded = this._integrateFundingNeededToBreakeven(breakevenYears);
+      }
+
       return {
         breakevenYears: breakevenYears,
         billionYears: billionYears,
+        fundingNeeded: fundingNeeded,
       };
     }
 
@@ -1614,6 +1689,14 @@
       }
 
       return 'year ' + yearsValue.toFixed(yearsValue < 10 ? 1 : 0);
+    }
+
+    _formatFundingNeeded(fundingNeeded) {
+      if (!isFiniteNumber(fundingNeeded)) {
+        return '-';
+      }
+
+      return formatMoney(fundingNeeded);
     }
 
     /**
@@ -1756,20 +1839,6 @@
       return this._yFromValue(value);
     }
 
-    _valueFromYOrZero(y, plotBottomY) {
-      const hasFiniteInputs = isFiniteNumber(y) && isFiniteNumber(plotBottomY);
-      if (!hasFiniteInputs) {
-        return NaN;
-      }
-
-      // plotBottomY is the visual "$0" baseline for the log plot.
-      if (y >= plotBottomY - 0.01) {
-        return 0;
-      }
-
-      return this._finiteValueOrMax(this._yToValue(y));
-    }
-
     _appendExpenseBarSegmentLabel(group, textValue, x, y, fillColor) {
       const hasTarget = group && textValue && isFiniteNumber(x) && isFiniteNumber(y);
       if (!hasTarget) {
@@ -1811,20 +1880,29 @@
         return;
       }
 
-      const yVariableStart = this._yFromValueOrZero(this._variableAt(0), plotBottomY);
-      const yVariableEnd = this._yFromValueOrZero(this._variableAt(span), plotBottomY);
-      const yTotalStart = this._yFromValueOrZero(this._totalAt(0), plotBottomY);
-      const yTotalEnd = this._yFromValueOrZero(this._totalAt(span), plotBottomY);
-
       const spacing = isFiniteNumber(yearSpacing) ? yearSpacing : 18;
       const barWidth = clamp(spacing * 0.55, 10, 28);
       const yearsSpan = isFiniteNumber(span) && span >= 0 ? Math.max(0, Math.round(span)) : 0;
       const labelStep = Math.max(1, Math.ceil(44 / Math.max(1, spacing)));
 
       sampleTimes.forEach(function (tYearsFromStart) {
-        const ratio = clamp(tYearsFromStart / span, 0, 1);
-        const yVariableTop = yVariableStart + ratio * (yVariableEnd - yVariableStart);
-        let yTotalTop = yTotalStart + ratio * (yTotalEnd - yTotalStart);
+        const sampledVariableWeekly = this._variableAt(tYearsFromStart);
+        const sampledTotalWeekly = this._totalAt(tYearsFromStart);
+        const variableWeekly =
+          isFiniteNumber(sampledVariableWeekly) && sampledVariableWeekly > 0
+            ? this._finiteValueOrMax(sampledVariableWeekly)
+            : 0;
+        let totalWeekly =
+          isFiniteNumber(sampledTotalWeekly) && sampledTotalWeekly > 0
+            ? this._finiteValueOrMax(sampledTotalWeekly)
+            : 0;
+        if (totalWeekly < variableWeekly) {
+          totalWeekly = variableWeekly;
+        }
+        const fixedWeekly = Math.max(0, totalWeekly - variableWeekly);
+
+        const yVariableTop = this._yFromValueOrZero(variableWeekly, plotBottomY);
+        let yTotalTop = this._yFromValueOrZero(totalWeekly, plotBottomY);
         yTotalTop = Math.min(yTotalTop, yVariableTop);
 
         const x = this._xFromTime(tYearsFromStart);
@@ -1835,9 +1913,10 @@
         );
 
         const variableTopY = Math.min(plotBottomY, yVariableTop);
-        const variableHeight = Math.max(0, Math.abs(plotBottomY - yVariableTop));
+        const variableHeight = Math.max(0, plotBottomY - variableTopY);
         const fixedTopY = Math.min(yVariableTop, yTotalTop);
-        const fixedHeight = Math.max(0, Math.abs(yVariableTop - yTotalTop));
+        const fixedBottomY = Math.max(yVariableTop, yTotalTop);
+        const fixedHeight = Math.max(0, fixedBottomY - fixedTopY);
 
         const variableRect = createSvgEl('rect');
         setAttrs(variableRect, {
@@ -1871,20 +1950,13 @@
           return;
         }
 
-        const variableWeekly = this._valueFromYOrZero(yVariableTop, plotBottomY);
-        const totalWeekly = this._valueFromYOrZero(yTotalTop, plotBottomY);
-        const remainderWeekly =
-          isFiniteNumber(totalWeekly) && isFiniteNumber(variableWeekly)
-            ? Math.max(0, totalWeekly - variableWeekly)
-            : NaN;
-
         const variableLabelText =
           variableHeight >= MIN_BAR_LABEL_SEGMENT_HEIGHT
             ? formatBarMoneyFromWeekly(variableWeekly, this.state.units)
             : '';
         const fixedLabelText =
           fixedHeight >= MIN_BAR_LABEL_SEGMENT_HEIGHT
-            ? formatBarMoneyFromWeekly(remainderWeekly, this.state.units)
+            ? formatBarMoneyFromWeekly(fixedWeekly, this.state.units)
             : '';
 
         if (variableLabelText) {
@@ -1903,7 +1975,6 @@
           return;
         }
 
-        const fixedBottomY = fixedTopY + fixedHeight;
         const fixedLabelY = clamp(
           fixedTopY + fixedHeight / 2 + 4,
           fixedTopY + 10,
@@ -2762,6 +2833,7 @@
       if (!opts.skipKpis && metrics !== null) {
         this.nodes.summaryBreakeven.textContent = this._formatTime(metrics.breakevenYears);
         this.nodes.summaryBillion.textContent = this._formatTime(metrics.billionYears);
+        this.nodes.summaryFunding.textContent = this._formatFundingNeeded(metrics.fundingNeeded);
       }
     }
   }

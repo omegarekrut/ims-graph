@@ -76,9 +76,19 @@ test.describe('widget interactions', () => {
     const mount = await waitForWidgetMount(page, 'preview-growth');
     const beforeBreakeven = (await widgetSummary(mount, 'breakeven').textContent()) || '';
     const beforeBillion = (await widgetSummary(mount, 'billion').textContent()) || '';
+    const fundingSummary = widgetSummary(mount, 'funding');
+    const beforeFunding = (await fundingSummary.textContent()) || '';
+    expect(beforeFunding.startsWith('$')).toBe(true);
+
+    await fundingSummary.evaluate((node) => {
+      node.textContent = '__stale_funding__';
+    });
+    await expect(fundingSummary).toHaveText('__stale_funding__');
 
     await fillAndApplyInput(mount, 'revenue', '$500.49', 'blur');
     await expect(widgetInput(mount, 'revenue')).toHaveValue('$500');
+    await expect(fundingSummary).not.toHaveText('__stale_funding__');
+    await expect(fundingSummary).not.toHaveText('-');
 
     await fillAndApplyInput(mount, 'growth', '4.00%', 'enter');
     await expect(widgetInput(mount, 'growth')).toHaveValue('4%');
@@ -91,8 +101,11 @@ test.describe('widget interactions', () => {
 
     const afterBreakeven = (await widgetSummary(mount, 'breakeven').textContent()) || '';
     const afterBillion = (await widgetSummary(mount, 'billion').textContent()) || '';
+    const afterFunding = (await fundingSummary.textContent()) || '';
     expect(afterBreakeven).not.toBe(beforeBreakeven);
     expect(afterBillion).not.toBe(beforeBillion);
+    expect(afterFunding.startsWith('$')).toBe(true);
+    expect(afterFunding).not.toBe(beforeFunding);
   });
 
   test('drag handles and revenue hover tooltip stay interactive', async ({ page }) => {
