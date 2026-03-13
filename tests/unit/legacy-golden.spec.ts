@@ -8,6 +8,7 @@ import { LEGACY_GOLDEN_FIXTURES } from './fixtures/legacy-golden-fixtures';
 interface LegacyMetrics {
   breakevenYears: number | null;
   billionYears: number | null;
+  fundingNeeded: number | null;
 }
 
 interface LegacyNodes {
@@ -17,6 +18,7 @@ interface LegacyNodes {
   inputGrowth: HTMLInputElement;
   summaryBreakeven: Element;
   summaryBillion: Element;
+  summaryFunding: Element;
 }
 
 interface LegacyState {
@@ -44,7 +46,11 @@ interface LegacyInstance {
   nodes: LegacyNodes;
   _computeMetrics(): LegacyMetrics;
   _updateYDomain(): void;
+  _expenseBarTimes(): number[];
   _revenueAt(timeYears: number): number;
+  _variableAt(timeYears: number): number;
+  _totalAt(timeYears: number): number;
+  _yFromValueOrZero(value: number, plotBottomY: number): number;
   render(options?: Record<string, unknown>): void;
 }
 
@@ -175,8 +181,14 @@ describe('legacy calculator golden behavior', () => {
 
       expect(metrics.breakevenYears).toBeCloseTo(fixture.metrics.breakevenYears, 10);
       expect(metrics.billionYears).toBeCloseTo(fixture.metrics.billionYears, 10);
+      if (fixture.metrics.fundingNeeded === null) {
+        expect(metrics.fundingNeeded).toBeNull();
+      } else {
+        expect(metrics.fundingNeeded).toBeCloseTo(fixture.metrics.fundingNeeded, 10);
+      }
       expect(instance.nodes.summaryBreakeven.textContent).toBe(fixture.summary.breakeven);
       expect(instance.nodes.summaryBillion.textContent).toBe(fixture.summary.billion);
+      expect(instance.nodes.summaryFunding.textContent).toBe(fixture.summary.funding);
       expect(instance.nodes.inputRevenue.value).toBe(fixture.inputs.revenue);
       expect(instance.nodes.inputGrossMargin.value).toBe(fixture.inputs.grossMargin);
       expect(instance.nodes.inputFixed.value).toBe(fixture.inputs.fixed);
@@ -279,6 +291,8 @@ describe('legacy calculator golden behavior', () => {
     const metrics = instance._computeMetrics();
     expect(metrics.breakevenYears).not.toBeNull();
     expect(metrics.billionYears).not.toBeNull();
+    expect(metrics.fundingNeeded).not.toBeNull();
+    expect(metrics.fundingNeeded).toBeGreaterThan(0);
 
     instance._updateYDomain();
     expect(instance.chart.yMin).toBeGreaterThan(0);
@@ -440,6 +454,86 @@ describe('legacy calculator golden behavior', () => {
     );
   });
 
+  it('keeps bar-mode segment geometry aligned to sampled expense values', () => {
+    const api = getLegacyApi();
+    const mount = createMount('ims-growth-calc-bars-sampled-geometry');
+    const instance = api.init(mount, {
+      units: 'year',
+      expenseViz: 'bars',
+      weeklyRevenue0: 120,
+      weeklyGrowthRate: 0.03,
+      grossMargin: 0.45,
+      weeklyFixedExpenses: 900,
+      yearsMin: 1,
+      yearsMax: 6,
+    });
+    expect(instance).not.toBeNull();
+    if (!instance) {
+      return;
+    }
+
+    instance.render();
+    const sampleTimes = instance._expenseBarTimes();
+    expect(sampleTimes.length).toBeGreaterThan(2);
+
+    const variableRects = Array.from(
+      mount.querySelectorAll('svg rect[fill="#E6A7BC"]')
+    ) as SVGRectElement[];
+    const fixedRects = Array.from(
+      mount.querySelectorAll('svg rect[fill="#D4D4DE"]')
+    ) as SVGRectElement[];
+    expect(variableRects.length).toBe(sampleTimes.length);
+    expect(fixedRects.length).toBe(sampleTimes.length);
+
+    const plotBottomY = instance.chart.height - instance.chart.paddingBottom;
+
+    sampleTimes.forEach((timeYearsFromStart, index) => {
+      const sampledVariable = instance._variableAt(timeYearsFromStart);
+      const sampledTotal = instance._totalAt(timeYearsFromStart);
+      const variableWeekly =
+        Number.isFinite(sampledVariable) && sampledVariable > 0 ? sampledVariable : 0;
+      let totalWeekly = Number.isFinite(sampledTotal) && sampledTotal > 0 ? sampledTotal : 0;
+      if (totalWeekly < variableWeekly) {
+        totalWeekly = variableWeekly;
+      }
+
+      const expectedVariableTopY = instance._yFromValueOrZero(variableWeekly, plotBottomY);
+      const expectedTotalTopY = Math.min(
+        instance._yFromValueOrZero(totalWeekly, plotBottomY),
+        expectedVariableTopY
+      );
+      const expectedVariableY = Math.min(plotBottomY, expectedVariableTopY);
+      const expectedVariableHeight = Math.max(0, plotBottomY - expectedVariableY);
+      const expectedFixedTopY = Math.min(expectedVariableTopY, expectedTotalTopY);
+      const expectedFixedBottomY = Math.max(expectedVariableTopY, expectedTotalTopY);
+      const expectedFixedHeight = Math.max(0, expectedFixedBottomY - expectedFixedTopY);
+
+      const variableRect = variableRects[index];
+      const fixedRect = fixedRects[index];
+      const actualVariableY = Number.parseFloat(variableRect?.getAttribute('y') || 'NaN');
+      const actualVariableHeight = Number.parseFloat(variableRect?.getAttribute('height') || 'NaN');
+      const actualFixedY = Number.parseFloat(fixedRect?.getAttribute('y') || 'NaN');
+      const actualFixedHeight = Number.parseFloat(fixedRect?.getAttribute('height') || 'NaN');
+
+      expect(Number.isFinite(actualVariableY)).toBe(true);
+      expect(Number.isFinite(actualVariableHeight)).toBe(true);
+      expect(Number.isFinite(actualFixedY)).toBe(true);
+      expect(Number.isFinite(actualFixedHeight)).toBe(true);
+
+      expect(actualVariableY).toBeCloseTo(expectedVariableY, 6);
+      expect(actualVariableHeight).toBeCloseTo(expectedVariableHeight, 6);
+      expect(actualFixedY).toBeCloseTo(expectedFixedTopY, 6);
+      expect(actualFixedHeight).toBeCloseTo(expectedFixedHeight, 6);
+
+      const actualTotalTopY = Math.min(actualVariableY, actualFixedY);
+      expect(actualTotalTopY).toBeCloseTo(expectedTotalTopY, 6);
+      expect(actualVariableHeight + actualFixedHeight).toBeCloseTo(
+        plotBottomY - expectedTotalTopY,
+        6
+      );
+    });
+  });
+
   it('extends low-end ticks below month floor when month domain opens downward', () => {
     const api = getLegacyApi();
     const mount = createMount('ims-growth-calc-month-low-ticks');
@@ -470,5 +564,62 @@ describe('legacy calculator golden behavior', () => {
       }
     });
     expect(monthDisplayTicks.some((tick) => tick < 90)).toBe(true);
+  });
+
+  it('returns funding-needed edge-case values for immediate, finite, and unresolved breakeven', () => {
+    const api = getLegacyApi();
+
+    const profitableMount = createMount('ims-growth-calc-funding-profitable');
+    const profitableInstance = api.init(profitableMount, {
+      weeklyRevenue0: 2000,
+      grossMargin: 0.8,
+      weeklyFixedExpenses: 1000,
+      weeklyGrowthRate: 0,
+    });
+    expect(profitableInstance).not.toBeNull();
+    if (!profitableInstance) {
+      return;
+    }
+
+    const profitableMetrics = profitableInstance._computeMetrics();
+    expect(profitableMetrics.breakevenYears).toBe(0);
+    expect(profitableMetrics.fundingNeeded).toBe(0);
+    expect(profitableInstance.nodes.summaryFunding.textContent).toBe('$0');
+
+    const finiteMount = createMount('ims-growth-calc-funding-finite');
+    const finiteInstance = api.init(finiteMount, {
+      weeklyRevenue0: 120,
+      grossMargin: 0.75,
+      weeklyFixedExpenses: 1400,
+      weeklyGrowthRate: 0.03,
+    });
+    expect(finiteInstance).not.toBeNull();
+    if (!finiteInstance) {
+      return;
+    }
+
+    const finiteMetrics = finiteInstance._computeMetrics();
+    expect(finiteMetrics.breakevenYears).not.toBeNull();
+    expect((finiteMetrics.breakevenYears ?? 0) > 0).toBe(true);
+    expect(finiteMetrics.fundingNeeded).not.toBeNull();
+    expect((finiteMetrics.fundingNeeded ?? 0) > 0).toBe(true);
+    expect(finiteInstance.nodes.summaryFunding.textContent?.startsWith('$')).toBe(true);
+
+    const unresolvedMount = createMount('ims-growth-calc-funding-unresolved');
+    const unresolvedInstance = api.init(unresolvedMount, {
+      weeklyRevenue0: 100,
+      grossMargin: 0.2,
+      weeklyFixedExpenses: 4000,
+      weeklyGrowthRate: 0,
+    });
+    expect(unresolvedInstance).not.toBeNull();
+    if (!unresolvedInstance) {
+      return;
+    }
+
+    const unresolvedMetrics = unresolvedInstance._computeMetrics();
+    expect(unresolvedMetrics.breakevenYears).toBeNull();
+    expect(unresolvedMetrics.fundingNeeded).toBeNull();
+    expect(unresolvedInstance.nodes.summaryFunding.textContent).toBe('-');
   });
 });

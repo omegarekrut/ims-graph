@@ -36,6 +36,7 @@ export interface GrowthCalculatorState {
 export interface GrowthKpiMetrics {
   breakevenYears: number | null;
   billionYears: number | null;
+  fundingNeeded: number | null;
 }
 
 export interface ChartDomain {
